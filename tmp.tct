@@ -1,0 +1,82 @@
+import sys
+import fitz 
+from PIL import Image
+import PIL.ImageShow
+import os
+import webbrowser  
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from pdf_handler import PDFViewer
+
+print("Starting!")
+
+print("Files in folder:", os.listdir())
+#sys.exit()
+
+
+
+
+
+root = tk.Tk()
+app = PDFViewer(root)
+root.mainloop()
+
+sys.exit()
+
+
+PIL.ImageShow.WindowsViewer = PIL.ImageShow.Viewer
+
+# doc = fitz.open("questions.pdf")
+# doc = fitz.open("questions.pdf")
+#doc = fitz.open(r"C:\Users\Tru1\Documents\Projects\Python_projects\Mecial_exams\questions.pdf")
+doc1 = fitz.open("C:\\Users\\Tru1\\Downloads\\answers.pdf")
+
+print("Pages:", doc1.page_count)
+
+page = doc1.load_page(0)
+text = page.get_text()
+
+# Split into lines
+lines = text.split("\n")
+print("Lines: ", len(lines))
+print(text)
+
+# Print with line numbers
+for i, line in enumerate(lines, start=1):
+    print(f"{i:03}: {line}")
+
+print("done1")
+
+
+
+
+
+PIL.ImageShow.WindowsViewer = PIL.ImageShow.Viewer
+
+#pdf_path = r"C:\path\to\your\second_file.pdf"
+doc2 = fitz.open("C:\\Users\\Tru1\\Downloads\\questions.pdf")
+
+output_folder = "rendered_pages"
+os.makedirs(output_folder, exist_ok=True)
+
+
+for page_number in range(doc2.page_count):
+    page = doc2.load_page(page_number)
+    # Render page to a pixmap (image)
+    pix = page.get_pixmap(dpi=150)
+    # Convert pixmap to PIL image
+    # img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    # Show the image
+    #print(f"Showing page {page_number + 1}")
+    #img.show()
+
+    filename = os.path.join(output_folder, f"page_{page_number + 1}.png")
+    pix.save(filename)
+
+    print(f"Opening page {page_number + 1} in browser...")
+    webbrowser.open(filename)
+
+
+
+
+print("done2")

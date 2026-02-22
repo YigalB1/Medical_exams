@@ -1,0 +1,107 @@
+class PDFViewer1:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("PDF Viewer")
+
+        self.doc = None
+        self.current_page = 0
+
+        # --- UI Layout ---
+        top_frame = tk.Frame(root)
+        top_frame.pack(pady=10)
+
+        self.load_btn = tk.Button(top_frame, text="Load PDF", command=self.load_pdf)
+        self.load_btn.pack(side=tk.LEFT, padx=5)
+
+        self.page_label = tk.Label(top_frame, text="No file loaded")
+        self.page_label.pack(side=tk.LEFT, padx=10)
+
+        nav_frame = tk.Frame(root)
+        nav_frame.pack(pady=10)
+
+        self.prev_btn = tk.Button(nav_frame, text="<< Previous", command=self.prev_page, state=tk.DISABLED)
+        self.prev_btn.pack(side=tk.LEFT, padx=5)
+
+        self.next_btn = tk.Button(nav_frame, text="Next >>", command=self.next_page, state=tk.DISABLED)
+        self.next_btn.pack(side=tk.LEFT, padx=5)
+
+        #self.canvas = tk.Label(root)
+        #self.canvas.pack()
+
+        # --- Scrollable Canvas ---
+        """
+        canvas_frame = tk.Frame(root)
+        canvas_frame.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(canvas_frame, bg="white")
+        self.canvas.pack(side="left", fill="both", expand=True)
+
+        scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        """
+        self.canvas = tk.Label(root)
+        self.canvas.pack()
+
+
+    # --- Load PDF ---
+    def load_pdf(self):
+        file_path = filedialog.askopenfilename(
+            filetypes=[("PDF Files", "*.pdf")]
+        )
+        if not file_path:
+            return
+
+        try:
+            self.doc = fitz.open(file_path)
+        except Exception as e:
+            messagebox.showerror("Error", f"Cannot open PDF:\n{e}")
+            return
+
+        self.current_page = 0
+        self.update_page_label()
+        self.show_page()
+
+        self.prev_btn.config(state=tk.NORMAL)
+        self.next_btn.config(state=tk.NORMAL)
+
+
+    def show_page(self):
+        if not self.doc:
+            return
+
+        page = self.doc.load_page(self.current_page)
+        pix = page.get_pixmap(dpi=150)
+
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        self.tk_img = ImageTk.PhotoImage(img)
+
+        self.canvas.config(image=self.tk_img)
+        self.canvas.image = self.tk_img
+        #self.canvas = tk.Label(root, image=self.tk_img)
+        #self.canvas.pack()
+
+        # Resize window to fit the image
+        self.root.geometry(f"{pix.width}x{pix.height + 120}")
+
+
+    
+    # --- Navigation ---
+    def next_page(self):
+        if self.current_page < self.doc.page_count - 1:
+            self.current_page += 1
+            self.update_page_label()
+            self.show_page()
+
+    def prev_page(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_page_label()
+            self.show_page()
+
+    def update_page_label(self):
+        if self.doc:
+            self.page_label.config(
+                text=f"Page {self.current_page + 1} / {self.doc.page_count}"
+            )
