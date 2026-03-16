@@ -1,4 +1,5 @@
 import fitz
+import re
 from PIL import Image, ImageTk
 import tkinter as tk
 from tkinter import filedialog
@@ -8,62 +9,157 @@ class PDFViewer:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Viewer")
-        self.root.geometry("900x1100")
-        self.root.resizable(False, False)  # lock window size
+        self.root.geometry("900x1200")
+        self.root.resizable(False, False)
         self.doc = None
         self.current_page = 0
         self._resize_job = None
+        self.answers = {}          # {q_num: 'א'} from answer PDF
+        #self.selected_answer = tk.StringVar()
+        #self.selected_answer = tk.StringVar(value="") 
+        self.selected_answers = {}  # dict of letter -> BooleanVar
+        self.current_question = 1  # tracks which question is on screen
+        
 
-        # Buttons
+        # --- Top button bar ---
         btn_frame = tk.Frame(root)
-        btn_frame.pack(pady=10)
+        btn_frame.pack(pady=5)
 
-        tk.Button(btn_frame, text="Load PDF", command=self.load_pdf).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Load Questions PDF", command=self.load_pdf).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Load Answers PDF", command=self.load_answers).pack(side="left", padx=5)
         tk.Button(btn_frame, text="◀ Prev", command=self.prev_page).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Next ▶", command=self.next_page).pack(side="left", padx=5)
 
         self.page_label = tk.Label(btn_frame, text="No PDF loaded")
         self.page_label.pack(side="left", padx=10)
 
-        # Use Canvas instead of Label - doesn't resize to fit content
+        # --- PDF Canvas ---
         self.canvas = tk.Canvas(root, bg="gray")
         self.canvas.pack(fill="both", expand=True)
 
-    def load_pdf(self):
-        #file_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
-        file_path="C:/Users/Tru1/Downloads/questions.pdf"
+        # --- Answer section ---
+        ans_frame = tk.Frame(root, pady=5)
+        ans_frame.pack()
 
+        self.question_label = tk.Label(ans_frame, text="Question #: ?", font=("Arial", 12, "bold"))
+        self.question_label.pack()
+
+        radio_frame = tk.Frame(ans_frame)
+        radio_frame.pack(pady=5)
+
+      
+        for letter in ["א", "ב", "ג", "ד"]:
+            var = tk.BooleanVar(value=False)
+            self.selected_answers[letter] = var
+            tk.Checkbutton(
+                radio_frame,
+                text=letter,
+                variable=var,
+                font=("Arial", 14),
+                padx=10
+            ).pack(side="left")
+      
+  
+
+
+
+        tk.Button(ans_frame, text="✔ Check", font=("Arial", 11), command=self.check_answer).pack(pady=5)
+
+        self.result_label = tk.Label(ans_frame, text="", font=("Arial", 12, "bold"))
+        self.result_label.pack()
+
+        root.after(200, self.auto_load) # load questions and answers files on startup
+
+
+    def auto_load(self):
+        questions_path = "C:/Users/Tru1/Downloads/questions.pdf"
+        answers_path   = "C:/Users/Tru1/Downloads/answers.pdf"
+
+        # Load questions
+        self.doc = fitz.open(questions_path)
+        self.current_page = 0
+        self.update_page_label()
+        self.show_page()
+
+        # Load answers
+        print(f"Calling parse_answer_pdf with: {answers_path}")  # <-- add this
+        _, self.answers = parse_answer_pdf(answers_path)
+        print(f"Loaded {len(self.answers)} answers: {self.answers}")
+        
+        
+
+
+
+    def load_pdf(self):
+        file_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
+        #file_path = "C:/Users/Tru1/Downloads/questions.pdf"
+        print(file_path)
         if not file_path:
             return
-
         self.doc = fitz.open(file_path)
         self.current_page = 0
         self.update_page_label()
         self.show_page()
 
+    def load_answers(self):
+        file_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
+        if not file_path:
+            return
+        _, self.answers = parse_answer_pdf(file_path)
+        tk.messagebox.showinfo("Answers Loaded", f"Loaded {len(self.answers)} answers.")
+
     def show_page(self):
         if not self.doc:
             return
-
         self.root.update_idletasks()
         page = self.doc.load_page(self.current_page)
         pix = page.get_pixmap(dpi=150)
 
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-        # Scale to fit canvas without exceeding it
         canvas_w = self.canvas.winfo_width()
         canvas_h = self.canvas.winfo_height()
 
         scale = min(canvas_w / img.width, canvas_h / img.height)
-        new_w = int(img.width * scale)
-        new_h = int(img.height * scale)
-        img = img.resize((new_w, new_h), Image.LANCZOS)
+        img = img.resize((int(img.width * scale), int(img.height * scale)), Image.LANCZOS)
 
         self.tk_img = ImageTk.PhotoImage(img)
-        self.canvas.delete("all")  # clear previous image
-        # Center the image in the canvas
+        self.canvas.delete("all")
         self.canvas.create_image(canvas_w // 2, canvas_h // 2, anchor="center", image=self.tk_img)
+
+        # Reset answer UI for new page
+        #self.selected_answer.set("")
+        #self.selected_answer.set("none")
+        #self.result_label.config(text="", bg=self.root.cget("bg"))
+        # Reset answer UI for new page
+        for var in self.selected_answers.values():
+            var.set(False)
+        self.result_label.config(text="", bg=self.root.cget("bg"))
+
+
+        self.current_question = self.current_page + 1
+        self.question_label.config(text=f"Question #: {self.current_question}")
+
+    def check_answer(self):
+        selected = [letter for letter, var in self.selected_answers.items() if var.get()]
+        print(f"xxxxx current_question: {self.current_question}")
+        print(f"xxxxx answers keys: {sorted(self.answers.keys())}")
+        print(f"xxxxx selected: {selected}")
+        
+        if not selected:
+            self.result_label.config(text="Please select an answer.", fg="orange")
+            return
+
+        correct = self.answers.get(self.current_question)
+        if correct is None:
+            self.result_label.config(text="No answer found for this question.", fg="gray")
+            return
+
+        correct_list = correct if isinstance(correct, list) else [correct]
+
+        if sorted(selected) == sorted(correct_list):
+            self.result_label.config(text=f"✔ Correct! Answer: {' '.join(correct_list)}", fg="green")
+        else:
+            self.result_label.config(text=f"✘ Wrong. Correct: {' '.join(correct_list)}", fg="red")
 
     def next_page(self):
         if self.doc and self.current_page < self.doc.page_count - 1:
@@ -79,10 +175,89 @@ class PDFViewer:
 
     def update_page_label(self):
         if self.doc:
-            self.page_label.config(
-                text=f"Page {self.current_page + 1} / {self.doc.page_count}"
-            )
+            self.page_label.config(text=f"Page {self.current_page + 1} / {self.doc.page_count}")
 
+
+def parse_answer_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    lines = []
+    for page in doc:
+        for line in page.get_text(sort=True).splitlines():
+            line = line.strip()
+            if line:
+                lines.append(line)
+
+
+    # DEBUG - print first 20 lines to see what we're working with
+    print("=== RAW LINES ===")
+    for i, l in enumerate(lines[:20]):
+        print(f"{i}: {l}")
+    print("=================")
+    print("=== TRYING TO MATCH ===")
+    for line in lines[7:]:
+        print(repr(line))  # repr() shows hidden characters
+    print("======================")
+
+
+    # Parse subject from lines 1-3
+    subject_line = lines[1] + " " + lines[2] + " " + lines[3]
+    parts = [p.strip() for p in subject_line.split("-")]
+    season_parts = parts[3].split() if len(parts) > 3 else ["", "", ""]
+    subject = {
+        "code":     parts[0] if len(parts) > 0 else "",
+        "topic":    parts[1] if len(parts) > 1 else "",
+        "level":    parts[2] if len(parts) > 2 else "",
+        "season":   season_parts[0] if len(season_parts) > 0 else "",
+        "term":     season_parts[1] if len(season_parts) > 1 else "",
+        "year":     season_parts[2] if len(season_parts) > 2 else "",
+        "run_type": parts[4] if len(parts) > 4 else "",
+    }
+
+    # Parse answers (skip first 7 header lines)
+    hebrew_letters = set("אבגד")
+    skip_words = {"מספר", "שאלה", "תשובה", "נכונה", "הערה", "מפתח", "תשובות"}
+    page_marker = re.compile(r"^\d+/\d+$")
+
+
+
+    '''
+    answers = {}
+    for line in lines[7:]:
+        if any(w in line for w in skip_words) or page_marker.match(line):
+            continue
+        match = re.match(r"^(\d+)\s*([אבגד].*)", line)
+        if match:
+            q_num = int(match.group(1))
+            letters = [c for c in match.group(2) if c in hebrew_letters]
+            answers[q_num] = letters if len(letters) > 1 else letters[0]
+    '''
+    answers = {}
+    for line in lines[3:]:
+        print(f"processing: {repr(line)}")
+        if any(w in line for w in skip_words) or page_marker.match(line):
+            continue
+        # Format is: 'ד                       5'  (letter first, number last)
+        match = re.match(r"^([אבגד][\s אבגד]*)\s+(\d+)\s*$", line)
+        if match:
+            letters = [c for c in match.group(1) if c in hebrew_letters]
+            q_num = int(match.group(2))
+            answers[q_num] = letters if len(letters) > 1 else letters[0]
+    print("=== FIRST 10 LINES ===")
+    for i, l in enumerate(lines[:10]):
+        print(f"{i}: {repr(l)}")
+
+    return subject, answers
+
+
+def extract_text_lines_with_pages(pdf_path):
+    doc = fitz.open(pdf_path)
+    lines = []
+    for page_num, page in enumerate(doc):
+        for line in page.get_text(sort=True).splitlines():
+            line = line.strip()
+            if line:
+                lines.append({"page": page_num + 1, "text": line})
+    return lines
 
 
 if __name__ == "__main__":

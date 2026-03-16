@@ -1,20 +1,17 @@
 import os
 import tkinter as tk
+import sys
 from tkinter import filedialog, messagebox
 from pdf_mng import PDFViewer
-from read_answers import extract_text_lines
 
+sys.dont_write_bytecode = True  # prevent .pyc files
 
 print("Starting!")
 print("Files in folder:", os.listdir())
 
 
 # Extract lines before launching the GUI
-lines = extract_text_lines("C:/Users/Tru1/Downloads/answers.pdf")
-for i, line in enumerate(lines):
-    print(f"{i}: {line}")
-
-
+#lines = extract_text_lines("C:/Users/Tru1/Downloads/answers.pdf")
 
 root = tk.Tk()
 app = PDFViewer(root)
