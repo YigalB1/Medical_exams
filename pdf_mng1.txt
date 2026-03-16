@@ -75,34 +75,20 @@ class PDFViewer:
 
 
     def auto_load(self):
-        #questions_path = "C:/Users/Tru1/Downloads/questions.pdf"
-        #answers_path   = "C:/Users/Tru1/Downloads/answers.pdf"
-        questions_url = "https://ima-files.s3.amazonaws.com/814180_114e80b1-0a46-4046-a7ee-9a69972b31f9.pdf"
-        answers_url   = "https://ima-files.s3.amazonaws.com/822587_8ebf6f4b-843b-4807-abf2-16767431b006.pdf"
+        questions_path = "C:/Users/Tru1/Downloads/questions.pdf"
+        answers_path   = "C:/Users/Tru1/Downloads/answers.pdf"
 
         # Load questions
-        #self.doc = fitz.open(questions_path)
-        #self.current_page = 0
-        #self.update_page_label()
-        #self.show_page()
-        # Load questions from web
-        self.doc = open_pdf_from_url(questions_url)
+        self.doc = fitz.open(questions_path)
         self.current_page = 0
         self.update_page_label()
         self.show_page()
 
-
-
-
-
         # Load answers
-        #print(f"Calling parse_answer_pdf with: {answers_path}")  # <-- add this
-        #_, self.answers = parse_answer_pdf(answers_path)
-        #print(f"Loaded {len(self.answers)} answers: {self.answers}")
-        # Load answers from web
-        answers_bytes = get_pdf_bytes(answers_url)
-        _, self.answers = parse_answer_pdf(answers_bytes)
-        print(f"Loaded {len(self.answers)} answers")
+        print(f"Calling parse_answer_pdf with: {answers_path}")  # <-- add this
+        _, self.answers = parse_answer_pdf(answers_path)
+        print(f"Loaded {len(self.answers)} answers: {self.answers}")
+        
         
 
 
@@ -195,16 +181,8 @@ class PDFViewer:
             self.page_label.config(text=f"Page {self.current_page + 1} / {self.doc.page_count}")
 
 
-def parse_answer_pdf(source):
-    ##doc = fitz.open(pdf_path)
-    # source can be a file path (str) or BytesIO object
-    if isinstance(source, str):
-        doc = fitz.open(source)
-    else:
-        doc = fitz.open(stream=source, filetype="pdf")
-
-
-
+def parse_answer_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
     lines = []
     for page in doc:
         for line in page.get_text(sort=True).splitlines():
