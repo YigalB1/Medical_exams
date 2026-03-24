@@ -49,82 +49,7 @@ def parse_answer_pdf(source):
     return answers
 
 
-
-def find_all_questions(doc):
-    page_height_map = {i: doc.load_page(i).rect.height for i in range(doc.page_count)}
-    
-    candidates = []
-    for page_idx in range(doc.page_count):
-        page   = doc.load_page(page_idx)
-        blocks = page.get_text("blocks", sort=True)
-        for block in blocks:
-            x0, y0, x1, y1, text, *_ = block
-            if not text.strip():
-                continue
-            first_line = text.strip().splitlines()[0].strip()
-
-            # Match EITHER:
-            # 1-digit:  "1 ."  "2."  "3 .  text..."
-            # 2-digit:  "10"  "11"  "12"  (number alone, no dot)
-            m = re.match(r"^(\d{1,2})\s*\.?", first_line)
-            if not m:
-                continue
-
-            q_num = int(m.group(1))
-            if q_num < 1 or q_num > 150:
-                continue
-
-            # For 1-digit: must have a dot
-            if q_num < 10:
-                if not re.match(r"^\d\s*\.", first_line):
-                    continue
-
-            # For 2-digit: block must be just the number (no dot, short text)
-            if q_num >= 10:
-                # Accept if line is just the number, optionally with a dot
-                if not re.match(r"^\d{2}\s*\.?\s*$", first_line):
-                    # Also accept if line starts with number+dot+text
-                    if not re.match(r"^\d{2}\s*\.\s+\S", first_line):
-                        continue
-
-            # Ignore footer area
-            if y0 > page_height_map[page_idx] * 0.90:
-                continue
-
-            candidates.append((q_num, page_idx, y0))
-
-    # Enforce sequential order
-    accepted = []
-    expected = 1
-    for q_num, page_idx, y0 in candidates:
-        if q_num == expected:
-            accepted.append((q_num, page_idx, y0))
-            expected += 1
-
-    # Build y_end for each question
-    questions = []
-    for i, (q_num, page_idx, y_start) in enumerate(accepted):
-        if i + 1 < len(accepted):
-            next_q_num, next_page, next_y = accepted[i + 1]
-            if next_page == page_idx:
-                y_end = next_y
-            else:
-                y_end = page_height_map[page_idx] * 0.90
-        else:
-            y_end = page_height_map[page_idx] * 0.90
-
-        questions.append({
-            "q_num":    q_num,
-            "page_idx": page_idx,
-            "y_start":  y_start,
-            "y_end":    y_end,
-        })
-
-    return questions
-
-
 # ─── Question splitter ─────────────────────────────────────────────────────────
-# to be replaced with find_all_questions
 def find_question_boundaries(page):
     page_height = page.rect.height
     blocks = page.get_text("blocks", sort=True)
@@ -136,19 +61,19 @@ def find_question_boundaries(page):
             continue
         first_line = text.strip().splitlines()[0].strip()
 
-        # Match patterns like: "1 .", "4 .  ", "10 .", "6."  (number then optional space then dot)
         m = re.match(r"^(\d{1,2})\s*\.", first_line)
         if not m:
+            m = re.search(r"^\.(\d{1,2})\s+\S", first_line)
+            if m:
+                q_num = int(m.group(1))
+            else:
+                continue
+        else:
+            q_num = int(m.group(1))
+
+        block_height = y1 - y0
+        if block_height < 20:
             continue
-
-        q_num = int(m.group(1))
-
-        # Ignore answer choices: .א .ב .ג .ד lines (single letter answers)
-        # These are short blocks near bottom, but safer to filter by q_num range
-        if q_num < 1 or q_num > 150:
-            continue
-
-        # Ignore page numbers / footers near bottom
         if y0 > page_height * 0.90:
             continue
 
@@ -157,7 +82,6 @@ def find_question_boundaries(page):
     if not boundaries:
         return []
 
-    # Keep first occurrence of each q_num (in case of duplicates)
     seen = {}
     for q_num, y_top in boundaries:
         if q_num not in seen:
@@ -186,24 +110,25 @@ def crop_page_to_image(page, y_start, y_end, dpi=150):
 def load_exam(exam_key):
     exam    = EXAMS[exam_key]
     doc     = open_pdf_from_url(exam["questions_url"])
-    # DEBUG 
-    # Add temporarily in load_exam() right after doc = open_pdf_from_url(...)
-    for page_idx in range(5,10):  # check first 5 pages
+    # debug
+    # Debug: print all text blocks for the page containing Q10
+    for page_idx in range(doc.page_count):
         page = doc.load_page(page_idx)
         blocks = page.get_text("blocks", sort=True)
-        print(f"\n=== PAGE {page_idx} ===")
-        for block in blocks:
-            x0, y0, x1, y1, text, *_ = block
-            first_line = text.strip().splitlines()[0][:80] if text.strip() else ""
-            print(f"  y={y0:.1f}-{y1:.1f} | {repr(first_line)}")
-    # end of debug
+        # Check if this page has Q10
+        text_all = " ".join([b[4] for b in blocks])
+        if re.search(r"[\.\s]10[\.\s]", text_all):
+            print(f"\n=== PAGE {page_idx} (contains Q10) ===")
+            for block in blocks:
+                x0, y0, x1, y1, text, *_ = block
+                first_line = text.strip().splitlines()[0][:60]
+                print(f"  y={y0:.1f}-{y1:.1f} | {repr(first_line)}")
+            break
 
     abytes  = get_pdf_bytes(exam["answers_url"])
     answers = parse_answer_pdf(abytes)
 
-    questions = find_all_questions(doc)
-
-    """questions = []
+    questions = []
     for page_idx in range(doc.page_count):
         page   = doc.load_page(page_idx)
         bounds = find_question_boundaries(page)
@@ -222,7 +147,6 @@ def load_exam(exam_key):
                 "y_start":  0,
                 "y_end":    page.rect.height,
             })
-    """
 
     questions.sort(key=lambda q: q["q_num"])
     return doc, answers, questions
@@ -278,7 +202,7 @@ if st.session_state.exam_key is None:
     cols = st.columns(3)
     for i, (key, meta) in enumerate(EXAMS.items()):
         with cols[i % 3]:
-            if st.button(meta["label"], width="stretch"):
+            if st.button(meta["label"], use_container_width=True):
                 st.session_state.exam_key = key
                 st.session_state.q_index  = 0
                 reset_answer()
@@ -312,11 +236,11 @@ if st.session_state.show_summary:
     st.divider()
     col_back, col_retry = st.columns(2)
     with col_back:
-        if st.button("🏠 Back to exam list", width="stretch"):
+        if st.button("🏠 Back to exam list", use_container_width=True):
             reset_exam()
             st.rerun()
     with col_retry:
-        if st.button("🔄 Retry this exam", width="stretch"):
+        if st.button("🔄 Retry this exam", use_container_width=True):
             key = st.session_state.exam_key
             reset_exam()
             st.session_state.exam_key = key
@@ -342,7 +266,7 @@ with top_mid:
         unsafe_allow_html=True,
     )
 with top_right:
-    if st.button("🚪 Exit exam", width="stretch"):
+    if st.button("🚪 Exit exam", use_container_width=True):
         st.session_state.show_summary = True
         st.rerun()
 
@@ -350,7 +274,7 @@ st.divider()
 
 # ── Question image ─────────────────────────────────────────────────────────────
 img = get_question_image(doc, q_info)
-st.image(img, width="stretch")
+st.image(img, use_container_width=True)
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 col_prev, col_info, col_next = st.columns([1, 2, 1])
