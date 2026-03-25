@@ -3,7 +3,13 @@ import fitz
 from PIL import Image
 import io
 import re
+import os
 from pdf_web import open_pdf_from_url, get_pdf_bytes
+
+# ─── Debug mode: set EXAM_DEBUG=1 in VSCode terminal to enable ─────────────────
+# In VSCode terminal run:  $env:EXAM_DEBUG="1" ; streamlit run app.py  (Windows)
+# In VSCode terminal run:  EXAM_DEBUG=1 streamlit run app.py            (Mac/Linux)
+DEBUG = os.environ.get("EXAM_DEBUG", "0") == "1"
 
 # ─── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Medical Exams", layout="centered")
@@ -49,10 +55,10 @@ def parse_answer_pdf(source):
     return answers
 
 
-
+# ─── Question finder (sequential, whole-doc scan) ─────────────────────────────
 def find_all_questions(doc):
     page_height_map = {i: doc.load_page(i).rect.height for i in range(doc.page_count)}
-    
+
     candidates = []
     for page_idx in range(doc.page_count):
         page   = doc.load_page(page_idx)
@@ -63,37 +69,29 @@ def find_all_questions(doc):
                 continue
             first_line = text.strip().splitlines()[0].strip()
 
-            # Match EITHER:
-            # 1-digit:  "1 ."  "2."  "3 .  text..."
-            # 2-digit:  "10"  "11"  "12"  (number alone, no dot)
-            m = re.match(r"^(\d{1,2})\s*\.?", first_line)
-            if not m:
+            # 1-digit questions: "1 ."  "2."  "3 .  text..."
+            if re.match(r"^\d\s*\.", first_line):
+                m = re.match(r"^(\d)\s*\.", first_line)
+                q_num = int(m.group(1))
+            # 2-or-3-digit questions: "10"  "11"  "100" (number alone, no dot)
+            elif re.match(r"^\d{2,3}\s*\.?\s*$", first_line):
+                m = re.match(r"^(\d{2,3})", first_line)
+                q_num = int(m.group(1))
+            # 2-or-3-digit questions with dot+text: "10. text..."
+            elif re.match(r"^\d{2,3}\s*\.\s+\S", first_line):
+                m = re.match(r"^(\d{2,3})", first_line)
+                q_num = int(m.group(1))
+            else:
                 continue
 
-            q_num = int(m.group(1))
-            if q_num < 1 or q_num > 150:
+            if q_num < 1 or q_num > 200:
                 continue
-
-            # For 1-digit: must have a dot
-            if q_num < 10:
-                if not re.match(r"^\d\s*\.", first_line):
-                    continue
-
-            # For 2-digit: block must be just the number (no dot, short text)
-            if q_num >= 10:
-                # Accept if line is just the number, optionally with a dot
-                if not re.match(r"^\d{2}\s*\.?\s*$", first_line):
-                    # Also accept if line starts with number+dot+text
-                    if not re.match(r"^\d{2}\s*\.\s+\S", first_line):
-                        continue
-
-            # Ignore footer area
             if y0 > page_height_map[page_idx] * 0.90:
                 continue
 
             candidates.append((q_num, page_idx, y0))
 
-    # Enforce sequential order
+    # Enforce sequential order — only accept q_num == expected next
     accepted = []
     expected = 1
     for q_num, page_idx, y0 in candidates:
@@ -106,13 +104,9 @@ def find_all_questions(doc):
     for i, (q_num, page_idx, y_start) in enumerate(accepted):
         if i + 1 < len(accepted):
             next_q_num, next_page, next_y = accepted[i + 1]
-            if next_page == page_idx:
-                y_end = next_y
-            else:
-                y_end = page_height_map[page_idx] * 0.90
+            y_end = next_y if next_page == page_idx else page_height_map[page_idx] * 0.90
         else:
             y_end = page_height_map[page_idx] * 0.90
-
         questions.append({
             "q_num":    q_num,
             "page_idx": page_idx,
@@ -121,55 +115,6 @@ def find_all_questions(doc):
         })
 
     return questions
-
-
-# ─── Question splitter ─────────────────────────────────────────────────────────
-# to be replaced with find_all_questions
-def find_question_boundaries(page):
-    page_height = page.rect.height
-    blocks = page.get_text("blocks", sort=True)
-
-    boundaries = []
-    for block in blocks:
-        x0, y0, x1, y1, text, *_ = block
-        if not text.strip():
-            continue
-        first_line = text.strip().splitlines()[0].strip()
-
-        # Match patterns like: "1 .", "4 .  ", "10 .", "6."  (number then optional space then dot)
-        m = re.match(r"^(\d{1,2})\s*\.", first_line)
-        if not m:
-            continue
-
-        q_num = int(m.group(1))
-
-        # Ignore answer choices: .א .ב .ג .ד lines (single letter answers)
-        # These are short blocks near bottom, but safer to filter by q_num range
-        if q_num < 1 or q_num > 150:
-            continue
-
-        # Ignore page numbers / footers near bottom
-        if y0 > page_height * 0.90:
-            continue
-
-        boundaries.append((q_num, y0))
-
-    if not boundaries:
-        return []
-
-    # Keep first occurrence of each q_num (in case of duplicates)
-    seen = {}
-    for q_num, y_top in boundaries:
-        if q_num not in seen:
-            seen[q_num] = y_top
-    boundaries = sorted(seen.items(), key=lambda x: x[1])
-
-    result = []
-    for i, (q_num, y_top) in enumerate(boundaries):
-        y_bottom = boundaries[i+1][1] if i+1 < len(boundaries) else page_height * 0.90
-        result.append((q_num, y_top, y_bottom))
-
-    return result
 
 
 def crop_page_to_image(page, y_start, y_end, dpi=150):
@@ -186,45 +131,25 @@ def crop_page_to_image(page, y_start, y_end, dpi=150):
 def load_exam(exam_key):
     exam    = EXAMS[exam_key]
     doc     = open_pdf_from_url(exam["questions_url"])
-    # DEBUG 
-    # Add temporarily in load_exam() right after doc = open_pdf_from_url(...)
-    for page_idx in range(5,10):  # check first 5 pages
-        page = doc.load_page(page_idx)
-        blocks = page.get_text("blocks", sort=True)
-        print(f"\n=== PAGE {page_idx} ===")
-        for block in blocks:
-            x0, y0, x1, y1, text, *_ = block
-            first_line = text.strip().splitlines()[0][:80] if text.strip() else ""
-            print(f"  y={y0:.1f}-{y1:.1f} | {repr(first_line)}")
-    # end of debug
-
     abytes  = get_pdf_bytes(exam["answers_url"])
     answers = parse_answer_pdf(abytes)
-
     questions = find_all_questions(doc)
 
-    """questions = []
-    for page_idx in range(doc.page_count):
-        page   = doc.load_page(page_idx)
-        bounds = find_question_boundaries(page)
-        if bounds:
-            for q_num, y_start, y_end in bounds:
-                questions.append({
-                    "q_num":    q_num,
-                    "page_idx": page_idx,
-                    "y_start":  y_start,
-                    "y_end":    y_end,
-                })
-        else:
-            questions.append({
-                "q_num":    page_idx + 1,
-                "page_idx": page_idx,
-                "y_start":  0,
-                "y_end":    page.rect.height,
-            })
-    """
+    # ── DEBUG: write Q<->A alignment file (only in dev mode) ──────────────────
+    if DEBUG:
+        with open("debug_qa_alignment.txt", "w", encoding="utf-8") as f:
+            f.write(f"Exam: {exam_key}\n")
+            f.write(f"Total questions found: {len(questions)}\n")
+            f.write(f"Total answers found:   {len(answers)}\n\n")
+            f.write(f"{'Q#':<6} {'Page':<6} {'Y-start':<10} {'Y-end':<10} {'Answer'}\n")
+            f.write("-" * 50 + "\n")
+            for q in questions:
+                ans = answers.get(q["q_num"], "-- NO ANSWER --")
+                if isinstance(ans, list):
+                    ans = " + ".join(ans)
+                f.write(f"{q['q_num']:<6} {q['page_idx']:<6} {q['y_start']:<10.1f} {q['y_end']:<10.1f} {ans}\n")
+        print(f"[DEBUG] Wrote debug_qa_alignment.txt  ({len(questions)} questions, {len(answers)} answers)")
 
-    questions.sort(key=lambda q: q["q_num"])
     return doc, answers, questions
 
 
