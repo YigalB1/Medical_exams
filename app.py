@@ -129,26 +129,31 @@ def crop_page_to_image(page, y_start, y_end, dpi=150):
 # ─── Load exam ─────────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner="Loading exam…")
 def load_exam(exam_key):
-    exam    = EXAMS[exam_key]
-    doc     = open_pdf_from_url(exam["questions_url"])
-    abytes  = get_pdf_bytes(exam["answers_url"])
-    answers = parse_answer_pdf(abytes)
-    questions = find_all_questions(doc)
+    exam = EXAMS[exam_key]
+    try:
+        doc = open_pdf_from_url(exam["questions_url"])
+        abytes = get_pdf_bytes(exam["answers_url"])
+        answers = parse_answer_pdf(abytes)
+        questions = find_all_questions(doc)
 
-    # ── DEBUG: write Q<->A alignment file (only in dev mode) ──────────────────
-    if DEBUG:
-        with open("debug_qa_alignment.txt", "w", encoding="utf-8") as f:
-            f.write(f"Exam: {exam_key}\n")
-            f.write(f"Total questions found: {len(questions)}\n")
-            f.write(f"Total answers found:   {len(answers)}\n\n")
-            f.write(f"{'Q#':<6} {'Page':<6} {'Y-start':<10} {'Y-end':<10} {'Answer'}\n")
-            f.write("-" * 50 + "\n")
-            for q in questions:
-                ans = answers.get(q["q_num"], "-- NO ANSWER --")
-                if isinstance(ans, list):
-                    ans = " + ".join(ans)
-                f.write(f"{q['q_num']:<6} {q['page_idx']:<6} {q['y_start']:<10.1f} {q['y_end']:<10.1f} {ans}\n")
-        print(f"[DEBUG] Wrote debug_qa_alignment.txt  ({len(questions)} questions, {len(answers)} answers)")
+        # ── DEBUG: write Q<->A alignment file (only in dev mode) ──────────────────
+        if DEBUG:
+            with open("debug_qa_alignment.txt", "w", encoding="utf-8") as f:
+                f.write(f"Exam: {exam_key}\n")
+                f.write(f"Total questions found: {len(questions)}\n")
+                f.write(f"Total answers found:   {len(answers)}\n\n")
+                f.write(f"{'Q#':<6} {'Page':<6} {'Y-start':<10} {'Y-end':<10} {'Answer'}\n")
+                f.write("-" * 50 + "\n")
+                for q in questions:
+                    ans = answers.get(q["q_num"], "-- NO ANSWER --")
+                    if isinstance(ans, list):
+                        ans = " + ".join(ans)
+                    f.write(f"{q['q_num']:<6} {q['page_idx']:<6} {q['y_start']:<10.1f} {q['y_end']:<10.1f} {ans}\n")
+            print(f"[DEBUG] Wrote debug_qa_alignment.txt  ({len(questions)} questions, {len(answers)} answers)")
+
+    except Exception as e:
+        st.error(f"Failed to load exam: {e}")
+        st.stop()
 
     return doc, answers, questions
 
