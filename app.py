@@ -1,3 +1,5 @@
+#from pydoc import doc
+
 import streamlit as st
 import fitz
 from PIL import Image
@@ -5,6 +7,19 @@ import io
 import re
 import os
 from pdf_web import open_pdf_from_url, get_pdf_bytes
+from answer_checker import check_answer
+from session_state import _init, reset_answer, reset_exam
+#from pdf_parser import find_all_questions, parse_answer_pdf
+import pdf_parser
+
+#from image_processor import get_question_image
+#from exam_loader import load_exam
+
+_init()
+
+
+
+# ... app.py UI code only ...
 
 # ─── Debug mode: set EXAM_DEBUG=1 in VSCode terminal to enable ─────────────────
 # In VSCode terminal run:  $env:EXAM_DEBUG="1" ; streamlit run app.py  (Windows)
@@ -25,105 +40,29 @@ EXAMS = {
 
 HEBREW_LETTERS = ["א", "ב", "ג", "ד"]
 
-# ─── Answer PDF parser ─────────────────────────────────────────────────────────
-def parse_answer_pdf(source):
-    if isinstance(source, bytes):
-        doc = fitz.open(stream=source, filetype="pdf")
-    else:
-        doc = fitz.open(stream=source.read(), filetype="pdf")
-
-    lines = []
-    for page in doc:
-        for line in page.get_text(sort=True).splitlines():
-            line = line.strip()
-            if line:
-                lines.append(line)
-
-    hebrew_letters = set("אבגד")
-    skip_words     = {"מספר", "שאלה", "תשובה", "נכונה", "הערה", "מפתח", "תשובות"}
-    page_marker    = re.compile(r"^\d+/\d+$")
-
-    answers = {}
-    for line in lines[3:]:
-        if any(w in line for w in skip_words) or page_marker.match(line):
-            continue
-        match = re.match(r"^([אבגד][\s אבגד]*)\s+(\d+)\s*$", line)
-        if match:
-            letters = [c for c in match.group(1) if c in hebrew_letters]
-            q_num   = int(match.group(2))
-            answers[q_num] = letters if len(letters) > 1 else letters[0]
-    return answers
 
 
-# ─── Question finder (sequential, whole-doc scan) ─────────────────────────────
-def find_all_questions(doc):
-    page_height_map = {i: doc.load_page(i).rect.height for i in range(doc.page_count)}
-
-    candidates = []
-    for page_idx in range(doc.page_count):
-        page   = doc.load_page(page_idx)
-        blocks = page.get_text("blocks", sort=True)
-        for block in blocks:
-            x0, y0, x1, y1, text, *_ = block
-            if not text.strip():
-                continue
-            first_line = text.strip().splitlines()[0].strip()
-
-            # 1-digit questions: "1 ."  "2."  "3 .  text..."
-            if re.match(r"^\d\s*\.", first_line):
-                m = re.match(r"^(\d)\s*\.", first_line)
-                q_num = int(m.group(1))
-            # 2-or-3-digit questions: "10"  "11"  "100" (number alone, no dot)
-            elif re.match(r"^\d{2,3}\s*\.?\s*$", first_line):
-                m = re.match(r"^(\d{2,3})", first_line)
-                q_num = int(m.group(1))
-            # 2-or-3-digit questions with dot+text: "10. text..."
-            elif re.match(r"^\d{2,3}\s*\.\s+\S", first_line):
-                m = re.match(r"^(\d{2,3})", first_line)
-                q_num = int(m.group(1))
-            else:
-                continue
-
-            if q_num < 1 or q_num > 200:
-                continue
-            if y0 > page_height_map[page_idx] * 0.90:
-                continue
-
-            candidates.append((q_num, page_idx, y0))
-
-    # Enforce sequential order — only accept q_num == expected next
-    accepted = []
-    expected = 1
-    for q_num, page_idx, y0 in candidates:
-        if q_num == expected:
-            accepted.append((q_num, page_idx, y0))
-            expected += 1
-
-    # Build y_end for each question
-    questions = []
-    for i, (q_num, page_idx, y_start) in enumerate(accepted):
-        if i + 1 < len(accepted):
-            next_q_num, next_page, next_y = accepted[i + 1]
-            y_end = next_y if next_page == page_idx else page_height_map[page_idx] * 0.90
-        else:
-            y_end = page_height_map[page_idx] * 0.90
-        questions.append({
-            "q_num":    q_num,
-            "page_idx": page_idx,
-            "y_start":  y_start,
-            "y_end":    y_end,
-        })
-
-    return questions
-
-
-def crop_page_to_image(page, y_start, y_end, dpi=150):
+def crop_page_to_image1(page, y_start, y_end, dpi=150):
     padding = 10
     clip = fitz.Rect(page.rect.x0, max(0, y_start - padding),
                      page.rect.x1, min(page.rect.height, y_end + padding))
     mat = fitz.Matrix(dpi / 72, dpi / 72)
     pix = page.get_pixmap(matrix=mat, clip=clip)
     return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+
+def crop_page_to_image(page, y_start, y_end, dpi=150):
+    padding = 10
+    clip = fitz.Rect(
+        page.rect.x0,
+        max(0, y_start - padding),
+        page.rect.x1,
+        min(page.rect.height, y_end + padding),
+    )
+    mat = fitz.Matrix(dpi / 72, dpi / 72)
+    pix = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
+    return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+
 
 
 # ─── Load exam ─────────────────────────────────────────────────────────────────
@@ -133,8 +72,11 @@ def load_exam(exam_key):
     try:
         doc = open_pdf_from_url(exam["questions_url"])
         abytes = get_pdf_bytes(exam["answers_url"])
-        answers = parse_answer_pdf(abytes)
-        questions = find_all_questions(doc)
+        #answers = parse_answer_pdf(abytes)
+        #questions = find_all_questions(doc)
+        answers = pdf_parser.parse_answer_pdf(abytes)
+        questions = pdf_parser.find_all_questions(doc)
+        
 
         # ── DEBUG: write Q<->A alignment file (only in dev mode) ──────────────────
         if DEBUG:
@@ -162,41 +104,6 @@ def get_question_image(doc, q_info) -> Image.Image:
     page = doc.load_page(q_info["page_idx"])
     return crop_page_to_image(page, q_info["y_start"], q_info["y_end"])
 
-
-# ─── Session state ─────────────────────────────────────────────────────────────
-def _init():
-    defaults = dict(
-        exam_key    = None,
-        q_index     = 0,
-        selected    = [],
-        result_msg  = "",
-        result_ok   = None,
-        score_good  = 0,       # correct answers count
-        score_bad   = 0,       # wrong answers count
-        answered    = set(),   # set of q_index already checked
-        show_summary= False,   # show exit summary screen
-    )
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-_init()
-
-
-def reset_answer():
-    st.session_state.selected   = []
-    st.session_state.result_msg = ""
-    st.session_state.result_ok  = None
-
-
-def reset_exam():
-    st.session_state.exam_key     = None
-    st.session_state.q_index      = 0
-    st.session_state.score_good   = 0
-    st.session_state.score_bad    = 0
-    st.session_state.answered     = set()
-    st.session_state.show_summary = False
-    reset_answer()
 
 
 # ─── UI ────────────────────────────────────────────────────────────────────────
@@ -319,24 +226,20 @@ if st.button("✔ Check Answer", type="primary"):
         st.warning("Please select an answer first.")
     else:
         correct = answers.get(q_num)
-        if correct is None:
-            st.info(f"No answer key found for question {q_num}.")
+        is_correct, message = check_answer(selected, correct)
+        
+        if is_correct is None:
+            st.info(message)
         else:
-            correct_list = correct if isinstance(correct, list) else [correct]
-            # Only count score once per question
             if q_index not in st.session_state.answered:
                 st.session_state.answered.add(q_index)
-                if sorted(selected) == sorted(correct_list):
+                if is_correct:
                     st.session_state.score_good += 1
                 else:
                     st.session_state.score_bad += 1
-
-            if sorted(selected) == sorted(correct_list):
-                st.session_state.result_msg = f"✔ Correct!  Answer: {' '.join(correct_list)}"
-                st.session_state.result_ok  = True
-            else:
-                st.session_state.result_msg = f"✘ Wrong.  Correct answer: {' '.join(correct_list)}"
-                st.session_state.result_ok  = False
+            
+            st.session_state.result_msg = message
+            st.session_state.result_ok = is_correct
 
 if st.session_state.result_msg:
     if st.session_state.result_ok:

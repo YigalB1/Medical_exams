@@ -1,0 +1,13 @@
+Mecial_exams/
+├── app.py                    # Main Streamlit UI only
+├── pdf_web.py               # Already separate ✓
+├── answer_checker.py         # check_answer() logic
+├── pdf_parser.py            # parse_answer_pdf(), find_all_questions()
+├── image_processor.py       # crop_page_to_image(), get_question_image()
+├── exam_loader.py           # load_exam()
+├── session_state.py         # _init(), reset_answer(), reset_exam()
+├── tests/
+│   ├── test_ui.py          # Browser automation tests
+│   ├── test_answer_checker.py
+│   └── test_pdf_parser.py
+└── requirements.txt
