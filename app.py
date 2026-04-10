@@ -25,6 +25,8 @@ _init()
 # In VSCode terminal run:  $env:EXAM_DEBUG="1" ; streamlit run app.py  (Windows)
 # In VSCode terminal run:  EXAM_DEBUG=1 streamlit run app.py            (Mac/Linux)
 DEBUG = os.environ.get("EXAM_DEBUG", "0") == "1"
+# Export one-question-per-page answer PDF when enabled.
+DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
 
 # ─── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Medical Exams", layout="centered")
@@ -64,6 +66,61 @@ def crop_page_to_image(page, y_start, y_end, dpi=150):
     return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
 
+def _answer_to_text(answer_value):
+    hebrew_to_latin = {"א": "A", "ב": "B", "ג": "C", "ד": "D"}
+
+    if answer_value is None:
+        return "-- NO ANSWER --"
+
+    letters = answer_value if isinstance(answer_value, list) else [str(answer_value)]
+    latin_parts = [hebrew_to_latin.get(letter, str(letter)) for letter in letters]
+    raw_parts = [str(letter) for letter in letters]
+
+    latin_text = " + ".join(latin_parts)
+    raw_text = " + ".join(raw_parts)
+
+    if latin_text == raw_text:
+        return latin_text
+    return f"{latin_text} ({raw_text})"
+
+
+def export_questions_with_answers_pdf(doc, questions, answers, exam_key):
+    os.makedirs("debug_exports", exist_ok=True)
+    output_path = os.path.join("debug_exports", f"{exam_key}_questions_with_answers.pdf")
+
+    out_doc = fitz.open()
+    page_width = 595
+    page_height = 842
+    margin = 36
+    answer_band = 90
+
+    for q in questions:
+        src_page = doc.load_page(q["page_idx"])
+        q_img = crop_page_to_image(src_page, q["y_start"], q["y_end"])
+        img_bytes = io.BytesIO()
+        q_img.save(img_bytes, format="PNG")
+
+        page = out_doc.new_page(width=page_width, height=page_height)
+        image_rect = fitz.Rect(margin, margin, page_width - margin, page_height - margin - answer_band)
+        page.insert_image(image_rect, stream=img_bytes.getvalue(), keep_proportion=True)
+
+        answer_text = _answer_to_text(answers.get(q["q_num"]))
+        footer = (
+            f"Question {q['q_num']} | Answer: {answer_text}\n"
+            f"Source page: {q['page_idx'] + 1} | y_start={q['y_start']:.1f}, y_end={q['y_end']:.1f}"
+        )
+        page.insert_textbox(
+            fitz.Rect(margin, page_height - margin - answer_band + 10, page_width - margin, page_height - margin),
+            footer,
+            fontsize=12,
+            align=fitz.TEXT_ALIGN_LEFT,
+        )
+
+    out_doc.save(output_path, garbage=4, deflate=True)
+    out_doc.close()
+    return output_path
+
+
 
 # ─── Load exam ─────────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner="Loading exam…")
@@ -93,11 +150,16 @@ def load_exam(exam_key):
                     f.write(f"{q['q_num']:<6} {q['page_idx']:<6} {q['y_start']:<10.1f} {q['y_end']:<10.1f} {ans}\n")
             print(f"[DEBUG] Wrote debug_qa_alignment.txt  ({len(questions)} questions, {len(answers)} answers)")
 
+        qa_export_path = None
+        if DEBUG_QA_PDF:
+            qa_export_path = export_questions_with_answers_pdf(doc, questions, answers, exam_key)
+            print(f"[DEBUG] Wrote {qa_export_path}")
+
     except Exception as e:
         st.error(f"Failed to load exam: {e}")
         st.stop()
 
-    return doc, answers, questions
+    return doc, answers, questions, qa_export_path
 
 
 def get_question_image(doc, q_info) -> Image.Image:
@@ -123,8 +185,11 @@ if st.session_state.exam_key is None:
     st.stop()
 
 # ── Load exam data ─────────────────────────────────────────────────────────────
-doc, answers, questions = load_exam(st.session_state.exam_key)
+doc, answers, questions, qa_export_path = load_exam(st.session_state.exam_key)
 total_q = len(questions)
+
+if DEBUG_QA_PDF and qa_export_path:
+    st.caption(f"Debug QA PDF written to: {qa_export_path}")
 
 # ── Summary / exit screen ──────────────────────────────────────────────────────
 if st.session_state.show_summary:
