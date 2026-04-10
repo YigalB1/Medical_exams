@@ -15,3 +15,8 @@ Mecial_exams/
 This app extracts questions from a PDF file, and answers fo rthe questions from another PDF file.
 Each question is presented to the user, one by one, and the user needs to answer.
 The answer is compared to the actual answer and Good/bad is presented.
+
+I would like to add another debug file to be created, while keeping the current one.
+The current one is a PDF with all questions and answers.
+The one to be added is just a list of question numberss, with the answer for each question. 
+With same debug flag.
