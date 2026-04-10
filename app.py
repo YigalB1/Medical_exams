@@ -1,5 +1,19 @@
 #from pydoc import doc
 
+"""
+Streamlit UI entry point.
+
+Responsibilities in this file:
+- Render all exam UI screens (selector, question view, summary).
+- Handle user interactions and session-state transitions.
+- Delegate non-UI work to helper modules.
+
+Non-UI modules used:
+- exam_loader.py: exam metadata + PDF parsing/loading.
+- image_processor.py: question image cropping/rendering.
+- debug_exporter.py: optional debug QA PDF export (triggered by loader).
+"""
+
 import streamlit as st
 #import fitz            # MOVED: image_processor.py / debug_exporter.py
 #from PIL import Image  # MOVED: image_processor.py
@@ -21,12 +35,19 @@ _init()
 
 # ... app.py UI code only ...
 
+# Runtime flow:
+# 1) Initialize session state.
+# 2) Choose exam.
+# 3) Load parsed questions/answers.
+# 4) Render active question and process answer checks.
+# 5) Show summary when user exits exam.
+
 # ─── Debug mode: set EXAM_DEBUG=1 in VSCode terminal to enable ─────────────────
 # In VSCode terminal run:  $env:EXAM_DEBUG="1" ; streamlit run app.py  (Windows)
 # In VSCode terminal run:  EXAM_DEBUG=1 streamlit run app.py            (Mac/Linux)
 DEBUG = os.environ.get("EXAM_DEBUG", "0") == "1"
-# Export one-question-per-page answer PDF when enabled.
-DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
+# Export one-question-per-page answer PDF only when BOTH flags are enabled.
+DEBUG_QA_PDF = DEBUG and (os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1")
 
 # ─── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Medical Exams", layout="centered")
