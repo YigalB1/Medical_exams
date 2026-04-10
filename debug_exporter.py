@@ -57,3 +57,25 @@ def export_questions_with_answers_pdf(doc, questions, answers, exam_key):
     out_doc.save(output_path, garbage=4, deflate=True)
     out_doc.close()
     return output_path
+
+
+def export_question_answer_list(questions, answers, exam_key):
+    os.makedirs("debug_exports", exist_ok=True)
+    output_path = os.path.join("debug_exports", f"{exam_key}_question_answer_list.txt")
+
+    ordered_q_nums = [q["q_num"] for q in questions]
+    seen = set()
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(f"Exam: {exam_key}\n")
+        f.write("Question -> Answer\n")
+        f.write("-" * 32 + "\n")
+
+        for q_num in ordered_q_nums:
+            if q_num in seen:
+                continue
+            seen.add(q_num)
+            answer_text = _answer_to_text(answers.get(q_num))
+            f.write(f"{q_num}: {answer_text}\n")
+
+    return output_path

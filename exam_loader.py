@@ -1,7 +1,8 @@
 import streamlit as st
 import pdf_parser
+import os
 from pdf_web import open_pdf_from_url, get_pdf_bytes
-from debug_exporter import export_questions_with_answers_pdf
+from debug_exporter import export_questions_with_answers_pdf, export_question_answer_list
 
 EXAMS = {
     "lung": {
@@ -23,7 +24,9 @@ def load_exam(exam_key, debug=False, debug_qa_pdf=False):
 
         # ── DEBUG: write Q<->A alignment file ─────────────────────────────────
         if debug:
-            with open("debug_qa_alignment.txt", "w", encoding="utf-8") as f:
+            os.makedirs("debug_exports", exist_ok=True)
+            alignment_path = os.path.join("debug_exports", f"{exam_key}_qa_alignment.txt")
+            with open(alignment_path, "w", encoding="utf-8") as f:
                 f.write(f"Exam: {exam_key}\n")
                 f.write(f"Total questions found: {len(questions)}\n")
                 f.write(f"Total answers found:   {len(answers)}\n\n")
@@ -34,12 +37,14 @@ def load_exam(exam_key, debug=False, debug_qa_pdf=False):
                     if isinstance(ans, list):
                         ans = " + ".join(ans)
                     f.write(f"{q['q_num']:<6} {q['page_idx']:<6} {q['y_start']:<10.1f} {q['y_end']:<10.1f} {ans}\n")
-            print(f"[DEBUG] Wrote debug_qa_alignment.txt  ({len(questions)} questions, {len(answers)} answers)")
+            print(f"[DEBUG] Wrote {alignment_path}  ({len(questions)} questions, {len(answers)} answers)")
 
         qa_export_path = None
         if debug_qa_pdf:
             qa_export_path = export_questions_with_answers_pdf(doc, questions, answers, exam_key)
+            qa_list_path = export_question_answer_list(questions, answers, exam_key)
             print(f"[DEBUG] Wrote {qa_export_path}")
+            print(f"[DEBUG] Wrote {qa_list_path}")
 
     except Exception as e:
         st.error(f"Failed to load exam: {e}")

@@ -46,8 +46,8 @@ _init()
 # In VSCode terminal run:  $env:EXAM_DEBUG="1" ; streamlit run app.py  (Windows)
 # In VSCode terminal run:  EXAM_DEBUG=1 streamlit run app.py            (Mac/Linux)
 DEBUG = os.environ.get("EXAM_DEBUG", "0") == "1"
-# Export one-question-per-page answer PDF only when BOTH flags are enabled.
-DEBUG_QA_PDF = DEBUG and (os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1")
+# Export one-question-per-page answer PDF when this dedicated flag is enabled.
+DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
 
 # ─── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Medical Exams", layout="centered")
