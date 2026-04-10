@@ -1,19 +1,19 @@
 #from pydoc import doc
 
 import streamlit as st
-import fitz
-from PIL import Image
-import io
-import re
+#import fitz            # MOVED: image_processor.py / debug_exporter.py
+#from PIL import Image  # MOVED: image_processor.py
+#import io              # MOVED: debug_exporter.py
+#import re              # MOVED: pdf_parser.py
 import os
-from pdf_web import open_pdf_from_url, get_pdf_bytes
+#from pdf_web import open_pdf_from_url, get_pdf_bytes  # MOVED: exam_loader.py
 from answer_checker import check_answer
 from session_state import _init, reset_answer, reset_exam
 #from pdf_parser import find_all_questions, parse_answer_pdf
-import pdf_parser
+#import pdf_parser  # MOVED: exam_loader.py
 
-#from image_processor import get_question_image
-#from exam_loader import load_exam
+from image_processor import get_question_image
+from exam_loader import load_exam, EXAMS
 
 _init()
 
@@ -32,139 +32,81 @@ DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
 st.set_page_config(page_title="Medical Exams", layout="centered")
 
 # ─── Exam catalogue ────────────────────────────────────────────────────────────
-EXAMS = {
-    "lung": {
-        "label": "Lung Exams",
-        "questions_url": "https://ima-files.s3.amazonaws.com/814180_114e80b1-0a46-4046-a7ee-9a69972b31f9.pdf",
-        "answers_url":   "https://ima-files.s3.amazonaws.com/822587_8ebf6f4b-843b-4807-abf2-16767431b006.pdf",
-    },
-}
+# MOVED to exam_loader.py
+# EXAMS = {
+#     "lung": {
+#         "label": "Lung Exams",
+#         "questions_url": "https://ima-files.s3.amazonaws.com/814180_114e80b1-0a46-4046-a7ee-9a69972b31f9.pdf",
+#         "answers_url":   "https://ima-files.s3.amazonaws.com/822587_8ebf6f4b-843b-4807-abf2-16767431b006.pdf",
+#     },
+# }
 
 HEBREW_LETTERS = ["א", "ב", "ג", "ד"]
 
 
 
-def crop_page_to_image1(page, y_start, y_end, dpi=150):
-    padding = 10
-    clip = fitz.Rect(page.rect.x0, max(0, y_start - padding),
-                     page.rect.x1, min(page.rect.height, y_end + padding))
-    mat = fitz.Matrix(dpi / 72, dpi / 72)
-    pix = page.get_pixmap(matrix=mat, clip=clip)
-    return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+# MOVED to image_processor.py
+# def crop_page_to_image1(page, y_start, y_end, dpi=150):
+#     padding = 10
+#     clip = fitz.Rect(page.rect.x0, max(0, y_start - padding),
+#                      page.rect.x1, min(page.rect.height, y_end + padding))
+#     mat = fitz.Matrix(dpi / 72, dpi / 72)
+#     pix = page.get_pixmap(matrix=mat, clip=clip)
+#     return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+#
+#
+# def crop_page_to_image(page, y_start, y_end, dpi=150):
+#     padding = 10
+#     clip = fitz.Rect(
+#         page.rect.x0,
+#         max(0, y_start - padding),
+#         page.rect.x1,
+#         min(page.rect.height, y_end + padding),
+#     )
+#     mat = fitz.Matrix(dpi / 72, dpi / 72)
+#     pix = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
+#     return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
 
-def crop_page_to_image(page, y_start, y_end, dpi=150):
-    padding = 10
-    clip = fitz.Rect(
-        page.rect.x0,
-        max(0, y_start - padding),
-        page.rect.x1,
-        min(page.rect.height, y_end + padding),
-    )
-    mat = fitz.Matrix(dpi / 72, dpi / 72)
-    pix = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
-    return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+# MOVED to debug_exporter.py
+# def _answer_to_text(answer_value):
+#     hebrew_to_latin = {"א": "A", "ב": "B", "ג": "C", "ד": "D"}
+#
+#     if answer_value is None:
+#         return "-- NO ANSWER --"
+#
+#     letters = answer_value if isinstance(answer_value, list) else [str(answer_value)]
+#     latin_parts = [hebrew_to_latin.get(letter, str(letter)) for letter in letters]
+#     raw_parts = [str(letter) for letter in letters]
+#
+#     latin_text = " + ".join(latin_parts)
+#     raw_text = " + ".join(raw_parts)
+#
+#     if latin_text == raw_text:
+#         return latin_text
+#     return f"{latin_text} ({raw_text})"
 
 
-def _answer_to_text(answer_value):
-    hebrew_to_latin = {"א": "A", "ב": "B", "ג": "C", "ד": "D"}
-
-    if answer_value is None:
-        return "-- NO ANSWER --"
-
-    letters = answer_value if isinstance(answer_value, list) else [str(answer_value)]
-    latin_parts = [hebrew_to_latin.get(letter, str(letter)) for letter in letters]
-    raw_parts = [str(letter) for letter in letters]
-
-    latin_text = " + ".join(latin_parts)
-    raw_text = " + ".join(raw_parts)
-
-    if latin_text == raw_text:
-        return latin_text
-    return f"{latin_text} ({raw_text})"
-
-
-def export_questions_with_answers_pdf(doc, questions, answers, exam_key):
-    os.makedirs("debug_exports", exist_ok=True)
-    output_path = os.path.join("debug_exports", f"{exam_key}_questions_with_answers.pdf")
-
-    out_doc = fitz.open()
-    page_width = 595
-    page_height = 842
-    margin = 36
-    answer_band = 90
-
-    for q in questions:
-        src_page = doc.load_page(q["page_idx"])
-        q_img = crop_page_to_image(src_page, q["y_start"], q["y_end"])
-        img_bytes = io.BytesIO()
-        q_img.save(img_bytes, format="PNG")
-
-        page = out_doc.new_page(width=page_width, height=page_height)
-        image_rect = fitz.Rect(margin, margin, page_width - margin, page_height - margin - answer_band)
-        page.insert_image(image_rect, stream=img_bytes.getvalue(), keep_proportion=True)
-
-        answer_text = _answer_to_text(answers.get(q["q_num"]))
-        footer = (
-            f"Question {q['q_num']} | Answer: {answer_text}\n"
-            f"Source page: {q['page_idx'] + 1} | y_start={q['y_start']:.1f}, y_end={q['y_end']:.1f}"
-        )
-        page.insert_textbox(
-            fitz.Rect(margin, page_height - margin - answer_band + 10, page_width - margin, page_height - margin),
-            footer,
-            fontsize=12,
-            align=fitz.TEXT_ALIGN_LEFT,
-        )
-
-    out_doc.save(output_path, garbage=4, deflate=True)
-    out_doc.close()
-    return output_path
+# MOVED to debug_exporter.py
+# def export_questions_with_answers_pdf(doc, questions, answers, exam_key):
+#     os.makedirs("debug_exports", exist_ok=True)
+#     output_path = os.path.join("debug_exports", f"{exam_key}_questions_with_answers.pdf")
+#     ...
+#     return output_path
 
 
 
 # ─── Load exam ─────────────────────────────────────────────────────────────────
-@st.cache_resource(show_spinner="Loading exam…")
-def load_exam(exam_key):
-    exam = EXAMS[exam_key]
-    try:
-        doc = open_pdf_from_url(exam["questions_url"])
-        abytes = get_pdf_bytes(exam["answers_url"])
-        #answers = parse_answer_pdf(abytes)
-        #questions = find_all_questions(doc)
-        answers = pdf_parser.parse_answer_pdf(abytes)
-        questions = pdf_parser.find_all_questions(doc)
-        
-
-        # ── DEBUG: write Q<->A alignment file (only in dev mode) ──────────────────
-        if DEBUG:
-            with open("debug_qa_alignment.txt", "w", encoding="utf-8") as f:
-                f.write(f"Exam: {exam_key}\n")
-                f.write(f"Total questions found: {len(questions)}\n")
-                f.write(f"Total answers found:   {len(answers)}\n\n")
-                f.write(f"{'Q#':<6} {'Page':<6} {'Y-start':<10} {'Y-end':<10} {'Answer'}\n")
-                f.write("-" * 50 + "\n")
-                for q in questions:
-                    ans = answers.get(q["q_num"], "-- NO ANSWER --")
-                    if isinstance(ans, list):
-                        ans = " + ".join(ans)
-                    f.write(f"{q['q_num']:<6} {q['page_idx']:<6} {q['y_start']:<10.1f} {q['y_end']:<10.1f} {ans}\n")
-            print(f"[DEBUG] Wrote debug_qa_alignment.txt  ({len(questions)} questions, {len(answers)} answers)")
-
-        qa_export_path = None
-        if DEBUG_QA_PDF:
-            qa_export_path = export_questions_with_answers_pdf(doc, questions, answers, exam_key)
-            print(f"[DEBUG] Wrote {qa_export_path}")
-
-    except Exception as e:
-        st.error(f"Failed to load exam: {e}")
-        st.stop()
-
-    return doc, answers, questions, qa_export_path
+# MOVED to exam_loader.py  (now accepts debug= and debug_qa_pdf= args)
+# @st.cache_resource(show_spinner="Loading exam…")
+# def load_exam(exam_key):
+#     ...
 
 
-def get_question_image(doc, q_info) -> Image.Image:
-    page = doc.load_page(q_info["page_idx"])
-    return crop_page_to_image(page, q_info["y_start"], q_info["y_end"])
+# MOVED to image_processor.py
+# def get_question_image(doc, q_info) -> Image.Image:
+#     page = doc.load_page(q_info["page_idx"])
+#     return crop_page_to_image(page, q_info["y_start"], q_info["y_end"])
 
 
 
@@ -185,7 +127,7 @@ if st.session_state.exam_key is None:
     st.stop()
 
 # ── Load exam data ─────────────────────────────────────────────────────────────
-doc, answers, questions, qa_export_path = load_exam(st.session_state.exam_key)
+doc, answers, questions, qa_export_path = load_exam(st.session_state.exam_key, debug=DEBUG, debug_qa_pdf=DEBUG_QA_PDF)
 total_q = len(questions)
 
 if DEBUG_QA_PDF and qa_export_path:
