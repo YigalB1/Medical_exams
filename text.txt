@@ -11,3 +11,7 @@ Mecial_exams/
 │   ├── test_answer_checker.py
 │   └── test_pdf_parser.py
 └── requirements.txt
+
+This app extracts questions from a PDF file, and answers fo rthe questions from another PDF file.
+Each question is presented to the user, one by one, and the user needs to answer.
+The answer is compared to the actual answer and Good/bad is presented.
