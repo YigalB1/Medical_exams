@@ -186,6 +186,24 @@ with top_right:
 st.divider()
 
 # ── Question image ─────────────────────────────────────────────────────────────
+if DEBUG:
+    same_page = [q for q in questions if q["page_idx"] == q_info["page_idx"]]
+    same_page_compact = [
+        {
+            "q_num": q["q_num"],
+            "y_start": round(q["y_start"], 1),
+            "y_end": round(q["y_end"], 1),
+        }
+        for q in same_page
+    ]
+    st.info(
+        (
+            f"DEBUG overlay | q_num={q_num} | q_index={q_index + 1}/{total_q} | "
+            f"page_idx={q_info['page_idx']} | y_start={q_info['y_start']:.1f} | y_end={q_info['y_end']:.1f}"
+        )
+    )
+    st.caption(f"Questions detected on this page: {same_page_compact}")
+
 img = get_question_image(doc, q_info)
 st.image(img, width="stretch")
 
