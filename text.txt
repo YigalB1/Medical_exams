@@ -43,3 +43,17 @@ When this button is pressed, open a new page with all the examms that can be fou
 , under the first drop menu when selecting " xxx " (in hebrew).
 The user can select any exam, which will be presented in the same way app.py presented the exam so far. 
 
+I would like to keep in Google slides a log.
+In this log, every start and end of exam will be recorded, something like user name (currently use "user", later on users will have to register)
+Also time stamp.
+Every question will be logged: exam name, question num, actual result, the correct resullt and pass/fail.
+
+https://docs.google.com/spreadsheets/d/19yWZK0tftDusrc9xIa6nKD9KipsYxi7oDOpO5XLsFsA/edit?gid=0#gid=0
+
+In order to create the logging:
+Open shee tin google according to: C:\Users\Tru1\Documents\Projects\Python_projects\Mecial_exams\GOOGLE_SHEETS_SETUP.md
+In google cloud services:
+https://console.cloud.google.com/iam-admin/serviceaccounts?project=medical-exams-log
+
+JSON key: 87f5bf9042c5b523aa2bd11d54d4b63c377d85e4
+

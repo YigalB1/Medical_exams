@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 debug_exports/
+.streamlit/
+medical-exams-log-87f5bf9042c5.json

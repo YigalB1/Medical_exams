@@ -16,6 +16,8 @@ def _init():
         dyn_answers_url    = None,    # answers PDF URL for a dynamically selected exam
         username           = "user",  # current user (for logging; will support registration later)
         exam_start_time    = None,    # timestamp when exam started (for logging)
+        sheets_probe_done  = False,   # whether startup ping to Google Sheets already ran
+        sheets_probe_ok    = None,    # startup ping status (True/False/None)
     )
     for k, v in defaults.items():
         if k not in st.session_state:

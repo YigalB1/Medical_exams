@@ -8,7 +8,29 @@ Uses service account credentials from Streamlit secrets.
 import gspread
 import streamlit as st
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
+
+
+WORKSHEET_HEADERS = {
+    "exam_sessions": [
+        "Timestamp",
+        "Username",
+        "Exam Name",
+        "Event",
+        "Total Questions",
+        "Correct",
+        "Score %",
+    ],
+    "question_answers": [
+        "Timestamp",
+        "Username",
+        "Exam Name",
+        "Question #",
+        "User Answer",
+        "Correct Answer",
+        "Result",
+    ],
+}
 
 
 def _get_sheets_client():
@@ -17,7 +39,16 @@ def _get_sheets_client():
     Expects secrets.toml to have GOOGLE_SHEETS_CREDS (JSON service account).
     """
     try:
-        creds = st.secrets["google_sheets"]
+        section = dict(st.secrets["google_sheets"])
+        if "type" in section:
+            creds = section
+        elif isinstance(section.get("google_sheets"), dict):
+            creds = dict(section["google_sheets"])
+        else:
+            creds = section
+
+        # This key is app config, not part of Google service-account credentials.
+        creds.pop("sheets_url", None)
         gc = gspread.service_account_from_dict(creds)
         return gc
     except Exception as e:
@@ -37,7 +68,14 @@ def get_sheet(sheet_url: str, worksheet_name: str):
         if not gc:
             return None
         sh = gc.open_by_url(sheet_url)
-        ws = sh.worksheet(worksheet_name)
+        try:
+            ws = sh.worksheet(worksheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            # Create required tabs automatically on first use.
+            ws = sh.add_worksheet(worksheet_name, 5000, 7)
+            headers = WORKSHEET_HEADERS.get(worksheet_name)
+            if headers:
+                ws.append_row(headers)
         return ws
     except Exception as e:
         st.warning(f"Could not open worksheet '{worksheet_name}': {e}")
@@ -60,6 +98,24 @@ def log_exam_start(sheet_url: str, username: str, exam_name: str) -> Optional[da
     except Exception as e:
         st.warning(f"Failed to log exam start: {e}")
         return None
+
+
+def log_startup_ping(sheet_url: str, username: str = "user") -> bool:
+    """
+    Write a simple startup row to validate Google Sheets logging connectivity.
+    Row format follows exam_sessions schema with Event='STARTING'.
+    """
+    ws = get_sheet(sheet_url, "exam_sessions")
+    if not ws:
+        return False
+
+    ts = datetime.now().isoformat()
+    try:
+        ws.append_row([ts, username, "APP", "STARTING", "", "", ""])
+        return True
+    except Exception as e:
+        st.warning(f"Failed to write startup ping: {e}")
+        return False
 
 
 def log_question_result(

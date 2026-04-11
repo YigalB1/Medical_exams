@@ -29,7 +29,28 @@ from session_state import _init, reset_answer, reset_exam
 from image_processor import get_question_image
 from exam_loader import load_exam, EXAMS
 from ima_browser import CATEGORIES, fetch_exams_for_specialty
-from google_sheets_logger import log_exam_start, log_exam_end, log_question_result
+try:
+    from google_sheets_logger import (
+        log_exam_start,
+        log_exam_end,
+        log_question_result,
+        log_startup_ping,
+    )
+    SHEETS_LOGGING_AVAILABLE = True
+except Exception:
+    SHEETS_LOGGING_AVAILABLE = False
+
+    def log_exam_start(*args, **kwargs):
+        return None
+
+    def log_exam_end(*args, **kwargs):
+        return None
+
+    def log_question_result(*args, **kwargs):
+        return None
+
+    def log_startup_ping(*args, **kwargs):
+        return False
 
 _init()
 
@@ -57,7 +78,11 @@ DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
 # sheets_url = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
 SHEETS_URL = None
 try:
-    SHEETS_URL = st.secrets.get("google_sheets", {}).get("sheets_url")
+    if SHEETS_LOGGING_AVAILABLE:
+        gs = st.secrets.get("google_sheets", {})
+        SHEETS_URL = gs.get("sheets_url")
+        if not SHEETS_URL and isinstance(gs.get("google_sheets"), dict):
+            SHEETS_URL = gs["google_sheets"].get("sheets_url")
 except:
     pass
 
@@ -70,6 +95,18 @@ HEBREW_LETTERS = ["א", "ב", "ג", "ד"]
 
 # ─── UI ────────────────────────────────────────────────────────────────────────
 st.title("🏥 Medical Exams")
+
+if SHEETS_URL and not st.session_state.sheets_probe_done:
+    st.session_state.sheets_probe_ok = log_startup_ping(
+        SHEETS_URL,
+        st.session_state.username,
+    )
+    st.session_state.sheets_probe_done = True
+
+if st.session_state.sheets_probe_ok is True:
+    st.caption("Google Sheets logging: startup ping written.")
+elif st.session_state.sheets_probe_ok is False:
+    st.warning("Google Sheets logging: startup ping failed. Check secrets and sheet sharing.")
 
 # ── Exam selector ──────────────────────────────────────────────────────────────
 if st.session_state.exam_key is None and st.session_state.browsing_category is None:
