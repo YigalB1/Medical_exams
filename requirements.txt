@@ -2,3 +2,5 @@
 pymupdf
 pillow
 requests
+gspread
+google-auth-oauthlib

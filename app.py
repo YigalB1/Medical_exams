@@ -29,6 +29,7 @@ from session_state import _init, reset_answer, reset_exam
 from image_processor import get_question_image
 from exam_loader import load_exam, EXAMS
 from ima_browser import CATEGORIES, fetch_exams_for_specialty
+from google_sheets_logger import log_exam_start, log_exam_end, log_question_result
 
 _init()
 
@@ -49,6 +50,16 @@ _init()
 DEBUG = os.environ.get("EXAM_DEBUG", "0") == "1"
 # Export one-question-per-page answer PDF when this dedicated flag is enabled.
 DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
+
+# ─── Google Sheets logging (optional) ──────────────────────────────────────────
+# If you have a Google Sheet for logging, add the URL here in secrets.toml:
+# [google_sheets]
+# sheets_url = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+SHEETS_URL = None
+try:
+    SHEETS_URL = st.secrets.get("google_sheets", {}).get("sheets_url")
+except:
+    pass
 
 # ─── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Medical Exams", layout="centered")
@@ -152,6 +163,15 @@ doc, answers, questions, qa_export_path = load_exam(
 )
 total_q = len(questions)
 
+# Log exam start on first load
+if st.session_state.exam_start_time is None and SHEETS_URL:
+    exam_name = st.session_state.exam_key or "Unknown"
+    st.session_state.exam_start_time = log_exam_start(
+        SHEETS_URL,
+        st.session_state.username,
+        exam_name,
+    )
+
 if DEBUG_QA_PDF and qa_export_path:
     st.caption(f"Debug QA PDF written to: {qa_export_path}")
 
@@ -161,6 +181,20 @@ if st.session_state.show_summary:
     bad       = st.session_state.score_bad
     attempted = good + bad
     pct       = round(100 * good / attempted) if attempted > 0 else 0
+
+    # Log exam end (only once on first show_summary)
+    if SHEETS_URL and st.session_state.exam_start_time:
+        exam_name = st.session_state.exam_key or "Unknown"
+        log_exam_end(
+            SHEETS_URL,
+            st.session_state.username,
+            exam_name,
+            total_q,
+            good,
+            bad,
+        )
+        # Clear start time so we don't log again on rerun
+        st.session_state.exam_start_time = None
 
     st.subheader("📊 Exam Summary")
     st.markdown(f"**Questions attempted:** {attempted} / {total_q}")
@@ -284,6 +318,19 @@ if st.button("✔ Check Answer", type="primary"):
                     st.session_state.score_good += 1
                 else:
                     st.session_state.score_bad += 1
+                
+                # Log question result
+                if SHEETS_URL:
+                    exam_name = st.session_state.exam_key or "Unknown"
+                    log_question_result(
+                        SHEETS_URL,
+                        st.session_state.username,
+                        exam_name,
+                        q_num,
+                        selected,
+                        correct,
+                        is_correct,
+                    )
             
             st.session_state.result_msg = message
             st.session_state.result_ok = is_correct

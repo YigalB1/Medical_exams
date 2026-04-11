@@ -14,6 +14,8 @@ def _init():
         browsing_category  = None,    # category key while browsing exam list (None = home)
         dyn_questions_url  = None,    # questions PDF URL for a dynamically selected exam
         dyn_answers_url    = None,    # answers PDF URL for a dynamically selected exam
+        username           = "user",  # current user (for logging; will support registration later)
+        exam_start_time    = None,    # timestamp when exam started (for logging)
     )
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -38,4 +40,5 @@ def reset_exam():
     st.session_state.browsing_category = None
     st.session_state.dyn_questions_url = None
     st.session_state.dyn_answers_url   = None
+    st.session_state.exam_start_time   = None
     reset_answer()
