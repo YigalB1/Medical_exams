@@ -26,6 +26,10 @@ def export_questions_with_answers_pdf(doc, questions, answers, exam_key):
     os.makedirs("debug_exports", exist_ok=True)
     output_path = os.path.join("debug_exports", f"{exam_key}_questions_with_answers.pdf")
 
+    if not questions:
+        # Some PDFs may fail question parsing; avoid creating an invalid 0-page PDF.
+        return None
+
     out_doc = fitz.open()
     page_width = 595
     page_height = 842
@@ -53,6 +57,10 @@ def export_questions_with_answers_pdf(doc, questions, answers, exam_key):
             fontsize=12,
             align=fitz.TEXT_ALIGN_LEFT,
         )
+
+    if out_doc.page_count == 0:
+        out_doc.close()
+        return None
 
     out_doc.save(output_path, garbage=4, deflate=True)
     out_doc.close()

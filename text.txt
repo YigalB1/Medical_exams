@@ -20,3 +20,26 @@ I would like to add another debug file to be created, while keeping the current 
 The current one is a PDF with all questions and answers.
 The one to be added is just a list of question numberss, with the answer for each question. 
 With same debug flag.
+
+
+Show me all categories under " מקצוע ההתמחות " in the link: https://www.ima.org.il/internship/Exams.aspx. How many categories are?
+
+Final target would be to show all categories.
+As for now, I would like to have 2 categories  to be displayed:
+1) רפואת שיניים
+2) מחלות ריאה
+
+On the GUI page, add a 2 category buttons near Lung exams (which will remain as is), 1st light yellow, 2nd light green.
+When each button is pressed, a 2nd GUI page will be opened, with all exams for this category.
+Once the user select a specific exam, the exam will be dispalyed same as the "lung exam" is wirking.
+
+
+
+
+
+I would like to add few exams for the user to selct. 
+Add a button near Lung exams, call it Lung diseasesץ
+When this button is pressed, open a new page with all the examms that can be found in https://www.ima.org.il/internship/Exams.aspx
+, under the first drop menu when selecting " xxx " (in hebrew).
+The user can select any exam, which will be presented in the same way app.py presented the exam so far. 
+

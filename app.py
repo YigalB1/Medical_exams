@@ -28,6 +28,7 @@ from session_state import _init, reset_answer, reset_exam
 
 from image_processor import get_question_image
 from exam_loader import load_exam, EXAMS
+from ima_browser import CATEGORIES, fetch_exams_for_specialty
 
 _init()
 
@@ -135,7 +136,7 @@ HEBREW_LETTERS = ["א", "ב", "ג", "ד"]
 st.title("🏥 Medical Exams")
 
 # ── Exam selector ──────────────────────────────────────────────────────────────
-if st.session_state.exam_key is None:
+if st.session_state.exam_key is None and st.session_state.browsing_category is None:
     st.subheader("Choose an exam:")
     cols = st.columns(3)
     for i, (key, meta) in enumerate(EXAMS.items()):
@@ -145,10 +146,85 @@ if st.session_state.exam_key is None:
                 st.session_state.q_index  = 0
                 reset_answer()
                 st.rerun()
+
+    st.divider()
+    st.subheader("Browse by specialty:")
+
+    cat_col1, cat_col2 = st.columns(2)
+    with cat_col1:
+        dentistry_btn = st.button("🦷 " + CATEGORIES["dentistry"]["label"],
+                                  key="cat_dentistry", use_container_width=True)
+    with cat_col2:
+        lung_btn = st.button("🫁 " + CATEGORIES["lung_diseases"]["label"],
+                             key="cat_lung_diseases", use_container_width=True)
+
+    # Color the category buttons: yellow for dentistry, green for lung diseases
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stHorizontalBlock"]:last-of-type
+            [data-testid="column"]:nth-child(1) button {
+            background-color: #FFFACD !important;
+            border-color: #DAA520 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:last-of-type
+            [data-testid="column"]:nth-child(2) button {
+            background-color: #90EE90 !important;
+            border-color: #228B22 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if dentistry_btn:
+        st.session_state.browsing_category = "dentistry"
+        st.rerun()
+    if lung_btn:
+        st.session_state.browsing_category = "lung_diseases"
+        st.rerun()
+    st.stop()
+
+# ── Category exam list page ────────────────────────────────────────────────────
+if st.session_state.browsing_category is not None and st.session_state.exam_key is None:
+    cat_key  = st.session_state.browsing_category
+    cat_meta = CATEGORIES[cat_key]
+
+    if st.button("← Back to home"):
+        st.session_state.browsing_category = None
+        st.rerun()
+
+    st.subheader(f"Exams: {cat_meta['label']}")
+
+    try:
+        exams = fetch_exams_for_specialty(cat_meta["specialty_id"])
+    except Exception as e:
+        st.error(f"Failed to fetch exam list: {e}")
+        st.stop()
+
+    if not exams:
+        st.warning("No exams with question + answer PDFs were found for this specialty.")
+        st.stop()
+
+    for exam in exams:
+        label = f"{exam['year']} — {exam['exam_type']}"
+        if st.button(label, key=f"dyn_{exam['questions_url']}", use_container_width=True):
+            st.session_state.exam_key          = f"dynamic_{cat_key}"
+            st.session_state.dyn_questions_url = exam["questions_url"]
+            st.session_state.dyn_answers_url   = exam["answers_url"]
+            st.session_state.q_index           = 0
+            reset_answer()
+            st.rerun()
     st.stop()
 
 # ── Load exam data ─────────────────────────────────────────────────────────────
-doc, answers, questions, qa_export_path = load_exam(st.session_state.exam_key, debug=DEBUG, debug_qa_pdf=DEBUG_QA_PDF)
+doc, answers, questions, qa_export_path = load_exam(
+    st.session_state.exam_key,
+    debug=DEBUG,
+    debug_qa_pdf=DEBUG_QA_PDF,
+    dyn_questions_url=st.session_state.dyn_questions_url,
+    dyn_answers_url=st.session_state.dyn_answers_url,
+)
 total_q = len(questions)
 
 if DEBUG_QA_PDF and qa_export_path:

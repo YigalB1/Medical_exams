@@ -46,9 +46,9 @@ def find_all_questions(doc: fitz.Document) -> List[Dict[str, Union[int, float]]]
             if re.match(r"^\d\s*\.(?!\d)", first_line):
                 m = re.match(r"^(\d)\s*\.(?!\d)", first_line)
                 q_num = int(m.group(1))
-            # 2-3 digit number-only headers: "10", "11", "100"
-            elif re.match(r"^[1-9]\d{1,2}\s*\.?\s*$", first_line):
-                m = re.match(r"^([1-9]\d{1,2})", first_line)
+            # 1-3 digit number-only headers: "1", "10", "11", "100"
+            elif re.match(r"^[1-9]\d{0,2}\s*\.?\s*$", first_line):
+                m = re.match(r"^([1-9]\d{0,2})", first_line)
                 q_num = int(m.group(1))
             # 2-3 digit headers with trailing text: "10. text..."
             elif re.match(r"^[1-9]\d{1,2}\s*\.(?!\d)\s*\S", first_line):

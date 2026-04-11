@@ -14,13 +14,26 @@ EXAMS = {
 
 
 @st.cache_resource(show_spinner="Loading exam…")
-def load_exam(exam_key, debug=False, debug_qa_pdf=False):
-    exam = EXAMS[exam_key]
+def load_exam(exam_key, debug=False, debug_qa_pdf=False,
+              dyn_questions_url=None, dyn_answers_url=None):
+    if dyn_questions_url:
+        q_url = dyn_questions_url
+        a_url = dyn_answers_url
+    else:
+        exam  = EXAMS[exam_key]
+        q_url = exam["questions_url"]
+        a_url = exam["answers_url"]
     try:
-        doc = open_pdf_from_url(exam["questions_url"])
-        abytes = get_pdf_bytes(exam["answers_url"])
+        doc = open_pdf_from_url(q_url)
+        abytes = get_pdf_bytes(a_url)
         answers = pdf_parser.parse_answer_pdf(abytes)
         questions = pdf_parser.find_all_questions(doc)
+
+        if not questions:
+            raise ValueError(
+                "No questions were detected in this exam PDF. "
+                "The parser may need adaptation for this exam format."
+            )
 
         # ── DEBUG: write Q<->A alignment file ─────────────────────────────────
         if debug:
@@ -43,7 +56,10 @@ def load_exam(exam_key, debug=False, debug_qa_pdf=False):
         if debug_qa_pdf:
             qa_export_path = export_questions_with_answers_pdf(doc, questions, answers, exam_key)
             qa_list_path = export_question_answer_list(questions, answers, exam_key)
-            print(f"[DEBUG] Wrote {qa_export_path}")
+            if qa_export_path:
+                print(f"[DEBUG] Wrote {qa_export_path}")
+            else:
+                print("[DEBUG] Skipped QA PDF export (no pages to write)")
             print(f"[DEBUG] Wrote {qa_list_path}")
 
     except Exception as e:
