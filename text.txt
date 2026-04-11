@@ -31,7 +31,7 @@ As for now, I would like to have 2 categories  to be displayed:
 
 On the GUI page, add a 2 category buttons near Lung exams (which will remain as is), 1st light yellow, 2nd light green.
 When each button is pressed, a 2nd GUI page will be opened, with all exams for this category.
-Once the user select a specific exam, the exam will be dispalyed same as the "lung exam" is wirking.
+Once the user select a specific exam, the exam will be dispalyed same as the "lung exam" is working.
 
 
 

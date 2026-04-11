@@ -53,83 +53,8 @@ DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
 # ─── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Medical Exams", layout="centered")
 
-# ─── Exam catalogue ────────────────────────────────────────────────────────────
-# MOVED to exam_loader.py
-# EXAMS = {
-#     "lung": {
-#         "label": "Lung Exams",
-#         "questions_url": "https://ima-files.s3.amazonaws.com/814180_114e80b1-0a46-4046-a7ee-9a69972b31f9.pdf",
-#         "answers_url":   "https://ima-files.s3.amazonaws.com/822587_8ebf6f4b-843b-4807-abf2-16767431b006.pdf",
-#     },
-# }
 
 HEBREW_LETTERS = ["א", "ב", "ג", "ד"]
-
-
-
-# MOVED to image_processor.py
-# def crop_page_to_image1(page, y_start, y_end, dpi=150):
-#     padding = 10
-#     clip = fitz.Rect(page.rect.x0, max(0, y_start - padding),
-#                      page.rect.x1, min(page.rect.height, y_end + padding))
-#     mat = fitz.Matrix(dpi / 72, dpi / 72)
-#     pix = page.get_pixmap(matrix=mat, clip=clip)
-#     return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-#
-#
-# def crop_page_to_image(page, y_start, y_end, dpi=150):
-#     padding = 10
-#     clip = fitz.Rect(
-#         page.rect.x0,
-#         max(0, y_start - padding),
-#         page.rect.x1,
-#         min(page.rect.height, y_end + padding),
-#     )
-#     mat = fitz.Matrix(dpi / 72, dpi / 72)
-#     pix = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
-#     return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-
-
-# MOVED to debug_exporter.py
-# def _answer_to_text(answer_value):
-#     hebrew_to_latin = {"א": "A", "ב": "B", "ג": "C", "ד": "D"}
-#
-#     if answer_value is None:
-#         return "-- NO ANSWER --"
-#
-#     letters = answer_value if isinstance(answer_value, list) else [str(answer_value)]
-#     latin_parts = [hebrew_to_latin.get(letter, str(letter)) for letter in letters]
-#     raw_parts = [str(letter) for letter in letters]
-#
-#     latin_text = " + ".join(latin_parts)
-#     raw_text = " + ".join(raw_parts)
-#
-#     if latin_text == raw_text:
-#         return latin_text
-#     return f"{latin_text} ({raw_text})"
-
-
-# MOVED to debug_exporter.py
-# def export_questions_with_answers_pdf(doc, questions, answers, exam_key):
-#     os.makedirs("debug_exports", exist_ok=True)
-#     output_path = os.path.join("debug_exports", f"{exam_key}_questions_with_answers.pdf")
-#     ...
-#     return output_path
-
-
-
-# ─── Load exam ─────────────────────────────────────────────────────────────────
-# MOVED to exam_loader.py  (now accepts debug= and debug_qa_pdf= args)
-# @st.cache_resource(show_spinner="Loading exam…")
-# def load_exam(exam_key):
-#     ...
-
-
-# MOVED to image_processor.py
-# def get_question_image(doc, q_info) -> Image.Image:
-#     page = doc.load_page(q_info["page_idx"])
-#     return crop_page_to_image(page, q_info["y_start"], q_info["y_end"])
-
 
 
 # ─── UI ────────────────────────────────────────────────────────────────────────
