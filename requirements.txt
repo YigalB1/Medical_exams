@@ -1,6 +1,6 @@
-﻿streamlit
-pymupdf
-pillow
-requests
-gspread
-google-auth-oauthlib
+﻿streamlit==1.40.0
+pymupdf==1.24.0
+pillow==10.4.0
+requests==2.32.0
+gspread==6.1.0
+google-auth-oauthlib==1.2.0
