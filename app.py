@@ -114,7 +114,7 @@ if st.session_state.exam_key is None and st.session_state.browsing_category is N
     cols = st.columns(3)
     for i, (key, meta) in enumerate(EXAMS.items()):
         with cols[i % 3]:
-            if st.button(meta["label"], width="stretch"):
+            if st.button(meta["label"], use_container_width=True):
                 st.session_state.exam_key = key
                 st.session_state.q_index  = 0
                 reset_answer()
@@ -249,11 +249,11 @@ if st.session_state.show_summary:
     st.divider()
     col_back, col_retry = st.columns(2)
     with col_back:
-        if st.button("🏠 Back to exam list", width="stretch"):
+        if st.button("🏠 Back to exam list", use_container_width=True):
             reset_exam()
             st.rerun()
     with col_retry:
-        if st.button("🔄 Retry this exam", width="stretch"):
+        if st.button("🔄 Retry this exam", use_container_width=True):
             key = st.session_state.exam_key
             reset_exam()
             st.session_state.exam_key = key
@@ -279,7 +279,7 @@ with top_mid:
         unsafe_allow_html=True,
     )
 with top_right:
-    if st.button("🚪 Exit exam", width="stretch"):
+    if st.button("🚪 Exit exam", use_container_width=True):
         st.session_state.show_summary = True
         st.rerun()
 
@@ -305,7 +305,7 @@ if DEBUG:
     st.caption(f"Questions detected on this page: {same_page_compact}")
 
 img = get_question_image(doc, q_info)
-st.image(img, width="stretch")
+st.image(img, use_container_width=True)
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 col_prev, col_info, col_next = st.columns([1, 2, 1])

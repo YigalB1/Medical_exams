@@ -39,16 +39,36 @@ def _get_sheets_client():
     Expects secrets.toml to have GOOGLE_SHEETS_CREDS (JSON service account).
     """
     try:
-        section = dict(st.secrets["google_sheets"])
-        if "type" in section:
-            creds = section
-        elif isinstance(section.get("google_sheets"), dict):
+        section = st.secrets.get("google_sheets", {})
+        if isinstance(section, dict) and isinstance(section.get("google_sheets"), dict):
             creds = dict(section["google_sheets"])
+        elif isinstance(section, dict):
+            creds = dict(section)
         else:
-            creds = section
+            raise ValueError("Invalid google_sheets secret structure")
 
         # This key is app config, not part of Google service-account credentials.
         creds.pop("sheets_url", None)
+
+        private_key = creds.get("private_key")
+        if isinstance(private_key, str):
+            private_key = private_key.replace("\\n", "\n").strip()
+            if private_key.startswith('"') and private_key.endswith('"'):
+                private_key = private_key[1:-1]
+            creds["private_key"] = private_key
+
+        required_fields = {
+            "type",
+            "project_id",
+            "private_key_id",
+            "private_key",
+            "client_email",
+            "client_id",
+        }
+        missing = required_fields - {k for k, v in creds.items() if v}
+        if missing:
+            raise ValueError(f"Missing Google Sheets credential fields: {', '.join(sorted(missing))}")
+
         gc = gspread.service_account_from_dict(creds)
         return gc
     except Exception as e:
