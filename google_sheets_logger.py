@@ -6,6 +6,7 @@ Uses service account credentials from Streamlit secrets.
 """
 
 import gspread
+import json
 import streamlit as st
 from datetime import datetime
 from typing import Optional
@@ -33,6 +34,45 @@ WORKSHEET_HEADERS = {
 }
 
 
+def _normalize_private_key(raw_key: str) -> str:
+    key = raw_key.strip()
+    if key.startswith('"""') and key.endswith('"""'):
+        key = key[3:-3].strip()
+    elif key.startswith("'""') and key.endswith("'"""):
+        key = key[3:-3].strip()
+    elif key.startswith('"') and key.endswith('"'):
+        key = key[1:-1].strip()
+    elif key.startswith("'") and key.endswith("'"):
+        key = key[1:-1].strip()
+
+    key = key.replace('\\r\\n', '\n').replace('\\n', '\n')
+    key = key.replace('\r\n', '\n')
+    return key.strip()
+
+
+def _normalize_google_sheets_creds(section):
+    if isinstance(section, str):
+        try:
+            section = json.loads(section)
+        except json.JSONDecodeError:
+            pass
+
+    if isinstance(section, dict) and isinstance(section.get("google_sheets"), dict):
+        creds = dict(section["google_sheets"])
+    elif isinstance(section, dict):
+        creds = dict(section)
+    else:
+        raise ValueError("Invalid google_sheets secret structure")
+
+    creds.pop("sheets_url", None)
+
+    private_key = creds.get("private_key")
+    if isinstance(private_key, str):
+        creds["private_key"] = _normalize_private_key(private_key)
+
+    return creds
+
+
 def _get_sheets_client():
     """
     Get authenticated Google Sheets client from Streamlit secrets.
@@ -40,22 +80,7 @@ def _get_sheets_client():
     """
     try:
         section = st.secrets.get("google_sheets", {})
-        if isinstance(section, dict) and isinstance(section.get("google_sheets"), dict):
-            creds = dict(section["google_sheets"])
-        elif isinstance(section, dict):
-            creds = dict(section)
-        else:
-            raise ValueError("Invalid google_sheets secret structure")
-
-        # This key is app config, not part of Google service-account credentials.
-        creds.pop("sheets_url", None)
-
-        private_key = creds.get("private_key")
-        if isinstance(private_key, str):
-            private_key = private_key.replace("\\n", "\n").strip()
-            if private_key.startswith('"') and private_key.endswith('"'):
-                private_key = private_key[1:-1]
-            creds["private_key"] = private_key
+        creds = _normalize_google_sheets_creds(section)
 
         required_fields = {
             "type",
@@ -68,6 +93,10 @@ def _get_sheets_client():
         missing = required_fields - {k for k, v in creds.items() if v}
         if missing:
             raise ValueError(f"Missing Google Sheets credential fields: {', '.join(sorted(missing))}")
+
+        private_key = creds.get("private_key", "")
+        if "BEGIN PRIVATE KEY" not in private_key and "BEGIN RSA PRIVATE KEY" not in private_key:
+            raise ValueError("Google Sheets private_key is malformed or missing PEM header")
 
         gc = gspread.service_account_from_dict(creds)
         return gc
