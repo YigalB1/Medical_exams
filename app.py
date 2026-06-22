@@ -129,6 +129,24 @@ def get_specialty_attributes(category_key):
     return SPECIALTY_ATTRIBUTES.get(category_key, [])
 
 
+def get_app_version_label():
+    env_version = os.environ.get("APP_VERSION")
+    if env_version:
+        return env_version
+
+    app_section = st.secrets.get("app", None)
+    if isinstance(app_section, Mapping):
+        secret_version = app_section.get("version")
+        if secret_version:
+            return str(secret_version)
+
+    secret_version = st.secrets.get("app_version", None)
+    if secret_version:
+        return str(secret_version)
+
+    return "dev-local"
+
+
 def get_question_attribute_options(q_info):
     inline_attrs = q_info.get("attributes", []) or []
 
@@ -146,6 +164,7 @@ def get_question_attribute_options(q_info):
 
 # ─── UI ────────────────────────────────────────────────────────────────────────
 st.title("🏥 Medical Exams")
+st.caption(f"Version: {get_app_version_label()}")
 
 if SHEETS_URL and not st.session_state.sheets_probe_done:
     st.session_state.sheets_probe_ok = log_startup_ping(
@@ -359,6 +378,22 @@ if st.session_state.show_summary:
 q_index = st.session_state.q_index
 q_info  = questions[q_index]
 q_num   = q_info["q_num"]
+inline_q_attrs = q_info.get("attributes", []) or []
+resolved_q_attrs = get_question_attribute_options(q_info)
+
+with st.expander("Debug runtime info", expanded=False):
+    st.write(
+        {
+            "version": get_app_version_label(),
+            "exam_key": st.session_state.exam_key,
+            "current_specialty": st.session_state.current_specialty,
+            "inline_attribute_count": len(inline_q_attrs),
+            "resolved_attribute_count": len(resolved_q_attrs),
+            "resolved_attributes": resolved_q_attrs,
+            "question_number": q_num,
+            "question_index": q_index,
+        }
+    )
 
 # ── Top bar: score + exit ──────────────────────────────────────────────────────
 top_left, top_mid, top_right = st.columns([2, 3, 2])
@@ -423,7 +458,7 @@ with col_next:
 st.divider()
 
 # ── Question attributes section ─────────────────────────────────────────────────
-q_attrs = get_question_attribute_options(q_info)
+q_attrs = resolved_q_attrs
 attr_default = st.session_state.question_attribute_selections.get(q_num, [])
 if q_attrs:
     st.markdown("**Question attributes**")
