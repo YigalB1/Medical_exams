@@ -133,8 +133,10 @@ def get_question_attribute_options(q_info):
     inline_attrs = q_info.get("attributes", []) or []
 
     specialty_key = st.session_state.current_specialty
-    if not specialty_key and st.session_state.exam_key == "lung":
-        specialty_key = "lung_diseases"
+    if not specialty_key:
+        exam_key = (st.session_state.exam_key or "").lower()
+        if exam_key == "lung" or "lung" in exam_key or "pulmo" in exam_key:
+            specialty_key = "lung_diseases"
 
     specialty_attrs = get_specialty_attributes(specialty_key) if specialty_key else []
 
