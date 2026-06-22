@@ -9,7 +9,8 @@ import gspread
 import json
 import streamlit as st
 from datetime import datetime
-from typing import Optional
+from collections.abc import Mapping
+from typing import Dict, List, Optional
 
 
 WORKSHEET_HEADERS = {
@@ -31,6 +32,13 @@ WORKSHEET_HEADERS = {
         "Correct Answer",
         "Result",
     ],
+    "question_attributes": [
+        "Timestamp",
+        "Username",
+        "Exam Name",
+        "Question #",
+        "Selected Attributes",
+    ],
 }
 
 
@@ -38,8 +46,8 @@ def _normalize_private_key(raw_key: str) -> str:
     key = raw_key.strip()
     if key.startswith('"""') and key.endswith('"""'):
         key = key[3:-3].strip()
-    elif key.startswith("'""') and key.endswith("'"""):
-        key = key[3:-3].strip()
+    elif key.startswith("'\"\"\"") and key.endswith("'\"\"\""):
+        key = key[4:-4].strip()
     elif key.startswith('"') and key.endswith('"'):
         key = key[1:-1].strip()
     elif key.startswith("'") and key.endswith("'"):
@@ -57,12 +65,15 @@ def _normalize_google_sheets_creds(section):
         except json.JSONDecodeError:
             pass
 
-    if isinstance(section, dict) and isinstance(section.get("google_sheets"), dict):
-        creds = dict(section["google_sheets"])
-    elif isinstance(section, dict):
-        creds = dict(section)
-    else:
+    if not isinstance(section, Mapping):
         raise ValueError("Invalid google_sheets secret structure")
+
+    section_dict = dict(section)
+    nested = section_dict.get("google_sheets")
+    if isinstance(nested, Mapping):
+        creds = dict(nested)
+    else:
+        creds = section_dict
 
     creds.pop("sheets_url", None)
 
@@ -79,7 +90,16 @@ def _get_sheets_client():
     Expects secrets.toml to have GOOGLE_SHEETS_CREDS (JSON service account).
     """
     try:
-        section = st.secrets.get("google_sheets", {})
+        section = st.secrets.get("google_sheets", None)
+        if section is None:
+            section = st.secrets.get("google_sheets_creds", None)
+        if section is None:
+            section = st.secrets.get("GOOGLE_SHEETS_CREDS", None)
+
+        # Some deployments keep creds at top-level fields in secrets.
+        if section is None:
+            section = st.secrets
+
         creds = _normalize_google_sheets_creds(section)
 
         required_fields = {
@@ -129,6 +149,61 @@ def get_sheet(sheet_url: str, worksheet_name: str):
     except Exception as e:
         st.warning(f"Could not open worksheet '{worksheet_name}': {e}")
         return None
+
+
+def load_question_attributes(sheet_url: str, username: str, exam_name: str) -> Dict[int, List[str]]:
+    """
+    Load persisted attribute selections for questions from the Google Sheet.
+    Returns a map from question number to selected attribute list.
+    """
+    try:
+        ws = get_sheet(sheet_url, "question_attributes")
+        if not ws:
+            return {}
+        records = ws.get_all_records()
+        selections: Dict[int, List[str]] = {}
+        for row in records:
+            if str(row.get("Username", "")).strip() != str(username).strip():
+                continue
+            if str(row.get("Exam Name", "")).strip() != str(exam_name).strip():
+                continue
+            q_num = row.get("Question #")
+            if q_num is None:
+                continue
+            try:
+                q_num = int(q_num)
+            except (ValueError, TypeError):
+                continue
+            raw_attrs = str(row.get("Selected Attributes", ""))
+            attrs = [s.strip() for s in raw_attrs.split(",") if s.strip()]
+            selections[q_num] = attrs
+        return selections
+    except Exception as e:
+        st.warning(f"Failed to load question attributes: {e}")
+        return {}
+
+
+def log_question_attributes(
+    sheet_url: str,
+    username: str,
+    exam_name: str,
+    question_num: int,
+    selected_attributes,
+):
+    """
+    Persist selected question attributes to the Google Sheet.
+    """
+    ws = get_sheet(sheet_url, "question_attributes")
+    if not ws:
+        return
+
+    ts = datetime.now().isoformat()
+    try:
+        attrs_text = ", ".join(selected_attributes) if selected_attributes else ""
+        ws.append_row([ts, username, exam_name, question_num, attrs_text])
+    except Exception as e:
+        st.warning(f"Failed to log question attributes: {e}")
+        return
 
 
 def log_exam_start(sheet_url: str, username: str, exam_name: str) -> Optional[datetime]:

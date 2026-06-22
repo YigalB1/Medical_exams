@@ -20,6 +20,7 @@ import streamlit as st
 #import io              # MOVED: debug_exporter.py
 #import re              # MOVED: pdf_parser.py
 import os
+from collections.abc import Mapping
 #from pdf_web import open_pdf_from_url, get_pdf_bytes  # MOVED: exam_loader.py
 from answer_checker import check_answer
 from session_state import _init, reset_answer, reset_exam
@@ -35,6 +36,8 @@ try:
         log_exam_end,
         log_question_result,
         log_startup_ping,
+        load_question_attributes,
+        log_question_attributes,
     )
     SHEETS_LOGGING_AVAILABLE = True
 except Exception:
@@ -51,6 +54,12 @@ except Exception:
 
     def log_startup_ping(*args, **kwargs):
         return False
+
+    def load_question_attributes(*args, **kwargs):
+        return {}
+
+    def log_question_attributes(*args, **kwargs):
+        return None
 
 _init()
 
@@ -79,10 +88,17 @@ DEBUG_QA_PDF = os.environ.get("EXAM_DEBUG_QA_PDF", "0") == "1"
 SHEETS_URL = None
 try:
     if SHEETS_LOGGING_AVAILABLE:
-        gs = st.secrets.get("google_sheets", {})
-        SHEETS_URL = gs.get("sheets_url")
-        if not SHEETS_URL and isinstance(gs.get("google_sheets"), dict):
-            SHEETS_URL = gs["google_sheets"].get("sheets_url")
+        gs = st.secrets.get("google_sheets", None)
+        if isinstance(gs, Mapping):
+            SHEETS_URL = gs.get("sheets_url")
+            nested = gs.get("google_sheets")
+            if not SHEETS_URL and isinstance(nested, Mapping):
+                SHEETS_URL = nested.get("sheets_url")
+
+        if not SHEETS_URL:
+            flat = st.secrets.get("sheets_url", None)
+            if flat:
+                SHEETS_URL = flat
 except:
     pass
 
@@ -91,6 +107,39 @@ st.set_page_config(page_title="Medical Exams", layout="centered")
 
 
 HEBREW_LETTERS = ["א", "ב", "ג", "ד"]
+
+SPECIALTY_ATTRIBUTES = {
+    "lung_diseases": [
+        "COPD",
+        "Asthma",
+        "Sleep medicine",
+        "Infectious disease",
+        "Pulmonary HTN",
+        "Transplantation",
+        "ILD",
+        "Interventional pulmonology",
+        "Oncology",
+        "NIV, ICU",
+        "Lung function testing",
+    ],
+}
+
+
+def get_specialty_attributes(category_key):
+    return SPECIALTY_ATTRIBUTES.get(category_key, [])
+
+
+def get_question_attribute_options(q_info):
+    inline_attrs = q_info.get("attributes", []) or []
+
+    specialty_key = st.session_state.current_specialty
+    if not specialty_key and st.session_state.exam_key == "lung":
+        specialty_key = "lung_diseases"
+
+    specialty_attrs = get_specialty_attributes(specialty_key) if specialty_key else []
+
+    # Preserve order while avoiding duplicates.
+    return list(dict.fromkeys([*inline_attrs, *specialty_attrs]))
 
 
 # ─── UI ────────────────────────────────────────────────────────────────────────
@@ -114,9 +163,11 @@ if st.session_state.exam_key is None and st.session_state.browsing_category is N
     cols = st.columns(3)
     for i, (key, meta) in enumerate(EXAMS.items()):
         with cols[i % 3]:
-            if st.button(meta["label"], use_container_width=True):
+            if st.button(meta["label"], width="stretch"):
                 st.session_state.exam_key = key
                 st.session_state.q_index  = 0
+                st.session_state.question_attributes_loaded = False
+                st.session_state.question_attribute_selections = {}
                 reset_answer()
                 st.rerun()
 
@@ -126,10 +177,10 @@ if st.session_state.exam_key is None and st.session_state.browsing_category is N
     cat_col1, cat_col2 = st.columns(2)
     with cat_col1:
         dentistry_btn = st.button("🦷 " + CATEGORIES["dentistry"]["label"],
-                                  key="cat_dentistry", use_container_width=True)
+                                  key="cat_dentistry", width="stretch")
     with cat_col2:
         lung_btn = st.button("🫁 " + CATEGORIES["lung_diseases"]["label"],
-                             key="cat_lung_diseases", use_container_width=True)
+                             key="cat_lung_diseases", width="stretch")
 
     # Color the category buttons: yellow for dentistry, green for lung diseases
     st.markdown(
@@ -169,6 +220,25 @@ if st.session_state.browsing_category is not None and st.session_state.exam_key 
 
     st.subheader(f"Exams: {cat_meta['label']}")
 
+    if cat_key in SPECIALTY_ATTRIBUTES:
+        st.markdown("**Select exam question scope**")
+        st.session_state.question_filter_mode = st.radio(
+            "Choose exam mode:",
+            ["Full exam", "Only questions matching selected attributes"],
+            index=0 if st.session_state.question_filter_mode == "Full exam" else 1,
+            key="question_filter_mode_radio",
+        )
+
+        if st.session_state.question_filter_mode == "Only questions matching selected attributes":
+            st.session_state.selected_attribute_filters = st.multiselect(
+                "Select attributes to filter by:",
+                get_specialty_attributes(cat_key),
+                default=st.session_state.selected_attribute_filters,
+                key="selected_attribute_filters",
+            )
+        else:
+            st.session_state.selected_attribute_filters = []
+
     try:
         exams = fetch_exams_for_specialty(cat_meta["specialty_id"])
     except Exception as e:
@@ -181,11 +251,14 @@ if st.session_state.browsing_category is not None and st.session_state.exam_key 
 
     for exam in exams:
         label = f"{exam['year']} — {exam['exam_type']}"
-        if st.button(label, key=f"dyn_{exam['questions_url']}", use_container_width=True):
+        if st.button(label, key=f"dyn_{exam['questions_url']}", width="stretch"):
             st.session_state.exam_key          = f"dynamic_{cat_key}"
             st.session_state.dyn_questions_url = exam["questions_url"]
             st.session_state.dyn_answers_url   = exam["answers_url"]
             st.session_state.q_index           = 0
+            st.session_state.current_specialty = cat_key
+            st.session_state.question_attributes_loaded = False
+            st.session_state.question_attribute_selections = {}
             reset_answer()
             st.rerun()
     st.stop()
@@ -198,6 +271,26 @@ doc, answers, questions, qa_export_path = load_exam(
     dyn_questions_url=st.session_state.dyn_questions_url,
     dyn_answers_url=st.session_state.dyn_answers_url,
 )
+
+if SHEETS_URL and not st.session_state.question_attributes_loaded:
+    exam_name = st.session_state.exam_key or "Unknown"
+    st.session_state.question_attribute_selections = load_question_attributes(
+        SHEETS_URL,
+        st.session_state.username,
+        exam_name,
+    )
+    st.session_state.question_attributes_loaded = True
+
+if st.session_state.question_filter_mode == "Only questions matching selected attributes" and st.session_state.selected_attribute_filters:
+    filtered = [
+        q for q in questions
+        if any(attr in q.get("attributes", []) for attr in st.session_state.selected_attribute_filters)
+    ]
+    if filtered:
+        questions = filtered
+    else:
+        st.warning("No questions matched the selected attribute filters. Showing full exam instead.")
+
 total_q = len(questions)
 
 # Log exam start on first load
@@ -249,11 +342,11 @@ if st.session_state.show_summary:
     st.divider()
     col_back, col_retry = st.columns(2)
     with col_back:
-        if st.button("🏠 Back to exam list", use_container_width=True):
+        if st.button("🏠 Back to exam list", width="stretch"):
             reset_exam()
             st.rerun()
     with col_retry:
-        if st.button("🔄 Retry this exam", use_container_width=True):
+        if st.button("🔄 Retry this exam", width="stretch"):
             key = st.session_state.exam_key
             reset_exam()
             st.session_state.exam_key = key
@@ -279,7 +372,7 @@ with top_mid:
         unsafe_allow_html=True,
     )
 with top_right:
-    if st.button("🚪 Exit exam", use_container_width=True):
+    if st.button("🚪 Exit exam", width="stretch"):
         st.session_state.show_summary = True
         st.rerun()
 
@@ -305,7 +398,7 @@ if DEBUG:
     st.caption(f"Questions detected on this page: {same_page_compact}")
 
 img = get_question_image(doc, q_info)
-st.image(img, use_container_width=True)
+st.image(img, width="stretch")
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 col_prev, col_info, col_next = st.columns([1, 2, 1])
@@ -324,6 +417,34 @@ with col_next:
         st.session_state.q_index += 1
         reset_answer()
         st.rerun()
+
+st.divider()
+
+# ── Question attributes section ─────────────────────────────────────────────────
+q_attrs = get_question_attribute_options(q_info)
+attr_default = st.session_state.question_attribute_selections.get(q_num, [])
+if q_attrs:
+    st.markdown("**Question attributes**")
+    selected_attrs = st.multiselect(
+        "Select attribute(s) for this question:",
+        q_attrs,
+        default=attr_default,
+        key=f"question_attrs_{q_num}",
+    )
+    st.session_state.question_attribute_selections[q_num] = selected_attrs
+    if selected_attrs:
+        st.caption(f"Saved attributes: {', '.join(selected_attrs)}")
+    if SHEETS_URL and st.button("Save attributes", key=f"save_attrs_{q_num}"):
+        log_question_attributes(
+            SHEETS_URL,
+            st.session_state.username,
+            st.session_state.exam_key or "Unknown",
+            q_num,
+            selected_attrs,
+        )
+        st.success("Question attributes saved.")
+else:
+    selected_attrs = []
 
 st.divider()
 

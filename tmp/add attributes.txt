@@ -1,0 +1,29 @@
+For each question in each exam, few attributes will be presented on top of the page for the user.
+The user will be able to select none, one or more attributes for each question.
+Attributes that are not selected will remain gray.
+Selected attributes will be colored with yellow.
+These selected attributes will be registered (where?).
+Next time the question will be presented, the selected attributes will be yellowed again.
+
+Later on, when user is selecting an exam by specialty (such as Lungs), the user will be able to either:
+1- Select fulll exam as now
+2- Select only questions with specific attribute(s) 
+
+
+
+For lung exams, the attributes are: 
+COPD
+Asthma
+Sleep medicine
+Infectious disease
+Pulmonary HTN
+Transplantation
+ILD
+Interventional pulmonology
+Oncology
+NIV, ICU
+Lung function testing
+
+For other exams, other than lungs, we will do it later.
+
+Suggest an architecture to do it.
