@@ -124,6 +124,9 @@ SPECIALTY_ATTRIBUTES = {
     ],
 }
 
+# Bump this on each deployment-relevant change to verify cloud/local parity.
+APP_BUILD_VERSION = "2026.06.22.1"
+
 
 def get_specialty_attributes(category_key):
     return SPECIALTY_ATTRIBUTES.get(category_key, [])
@@ -144,7 +147,7 @@ def get_app_version_label():
     if secret_version:
         return str(secret_version)
 
-    return "dev-local"
+    return APP_BUILD_VERSION
 
 
 def get_question_attribute_options(q_info):
