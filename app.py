@@ -20,6 +20,7 @@ import streamlit as st
 #import io              # MOVED: debug_exporter.py
 #import re              # MOVED: pdf_parser.py
 import os
+import inspect
 from collections.abc import Mapping
 #from pdf_web import open_pdf_from_url, get_pdf_bytes  # MOVED: exam_loader.py
 from answer_checker import check_answer
@@ -165,6 +166,26 @@ def get_question_attribute_options(q_info):
     return list(dict.fromkeys([*inline_attrs, *specialty_attrs]))
 
 
+def stretch_button(label, **kwargs):
+    """Compat wrapper for Streamlit versions with/without button width support."""
+    try:
+        if "width" in inspect.signature(st.button).parameters:
+            return st.button(label, width="stretch", **kwargs)
+    except Exception:
+        pass
+    return st.button(label, use_container_width=True, **kwargs)
+
+
+def stretch_image(image_obj, **kwargs):
+    """Compat wrapper for Streamlit versions with/without image width support."""
+    try:
+        if "width" in inspect.signature(st.image).parameters:
+            return st.image(image_obj, width="stretch", **kwargs)
+    except Exception:
+        pass
+    return st.image(image_obj, use_container_width=True, **kwargs)
+
+
 # ─── UI ────────────────────────────────────────────────────────────────────────
 st.title("🏥 Medical Exams")
 st.caption(f"Version: {get_app_version_label()}")
@@ -187,7 +208,7 @@ if st.session_state.exam_key is None and st.session_state.browsing_category is N
     cols = st.columns(3)
     for i, (key, meta) in enumerate(EXAMS.items()):
         with cols[i % 3]:
-            if st.button(meta["label"], width="stretch"):
+            if stretch_button(meta["label"]):
                 st.session_state.exam_key = key
                 st.session_state.q_index  = 0
                 st.session_state.question_attributes_loaded = False
@@ -200,11 +221,11 @@ if st.session_state.exam_key is None and st.session_state.browsing_category is N
 
     cat_col1, cat_col2 = st.columns(2)
     with cat_col1:
-        dentistry_btn = st.button("🦷 " + CATEGORIES["dentistry"]["label"],
-                                  key="cat_dentistry", width="stretch")
+        dentistry_btn = stretch_button("🦷 " + CATEGORIES["dentistry"]["label"],
+                                       key="cat_dentistry")
     with cat_col2:
-        lung_btn = st.button("🫁 " + CATEGORIES["lung_diseases"]["label"],
-                             key="cat_lung_diseases", width="stretch")
+        lung_btn = stretch_button("🫁 " + CATEGORIES["lung_diseases"]["label"],
+                                  key="cat_lung_diseases")
 
     # Color the category buttons: yellow for dentistry, green for lung diseases
     st.markdown(
@@ -275,7 +296,7 @@ if st.session_state.browsing_category is not None and st.session_state.exam_key 
 
     for exam in exams:
         label = f"{exam['year']} — {exam['exam_type']}"
-        if st.button(label, key=f"dyn_{exam['questions_url']}", width="stretch"):
+        if stretch_button(label, key=f"dyn_{exam['questions_url']}"):
             st.session_state.exam_key          = f"dynamic_{cat_key}"
             st.session_state.dyn_questions_url = exam["questions_url"]
             st.session_state.dyn_answers_url   = exam["answers_url"]
@@ -366,11 +387,11 @@ if st.session_state.show_summary:
     st.divider()
     col_back, col_retry = st.columns(2)
     with col_back:
-        if st.button("🏠 Back to exam list", width="stretch"):
+        if stretch_button("🏠 Back to exam list"):
             reset_exam()
             st.rerun()
     with col_retry:
-        if st.button("🔄 Retry this exam", width="stretch"):
+        if stretch_button("🔄 Retry this exam"):
             key = st.session_state.exam_key
             reset_exam()
             st.session_state.exam_key = key
@@ -412,7 +433,7 @@ with top_mid:
         unsafe_allow_html=True,
     )
 with top_right:
-    if st.button("🚪 Exit exam", width="stretch"):
+    if stretch_button("🚪 Exit exam"):
         st.session_state.show_summary = True
         st.rerun()
 
@@ -438,7 +459,7 @@ if DEBUG:
     st.caption(f"Questions detected on this page: {same_page_compact}")
 
 img = get_question_image(doc, q_info)
-st.image(img, width="stretch")
+stretch_image(img)
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 col_prev, col_info, col_next = st.columns([1, 2, 1])

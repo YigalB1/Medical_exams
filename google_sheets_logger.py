@@ -55,7 +55,22 @@ def _normalize_private_key(raw_key: str) -> str:
 
     key = key.replace('\\r\\n', '\n').replace('\\n', '\n')
     key = key.replace('\r\n', '\n')
-    return key.strip()
+
+    begin_marker = "-----BEGIN PRIVATE KEY-----"
+    end_marker = "-----END PRIVATE KEY-----"
+    begin_idx = key.find(begin_marker)
+    end_idx = key.find(end_marker)
+    if begin_idx != -1 and end_idx != -1:
+        end_idx += len(end_marker)
+        key = key[begin_idx:end_idx]
+
+    # Ensure PEM formatting is clean and newline-terminated.
+    lines = [line.strip() for line in key.split('\n') if line.strip()]
+    normalized = '\n'.join(lines)
+    if normalized and not normalized.endswith('\n'):
+        normalized += '\n'
+
+    return normalized
 
 
 def _normalize_google_sheets_creds(section):
