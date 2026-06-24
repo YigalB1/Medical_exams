@@ -56,13 +56,20 @@ def _normalize_private_key(raw_key: str) -> str:
     key = key.replace('\\r\\n', '\n').replace('\\n', '\n')
     key = key.replace('\r\n', '\n')
 
-    begin_marker = "-----BEGIN PRIVATE KEY-----"
-    end_marker = "-----END PRIVATE KEY-----"
-    begin_idx = key.find(begin_marker)
-    end_idx = key.find(end_marker)
-    if begin_idx != -1 and end_idx != -1:
-        end_idx += len(end_marker)
-        key = key[begin_idx:end_idx]
+    # Remove markdown/json wrappers if secrets were pasted with formatting.
+    key = key.replace("```", "").replace("\\\"", '"')
+
+    pem_pairs = [
+        ("-----BEGIN PRIVATE KEY-----", "-----END PRIVATE KEY-----"),
+        ("-----BEGIN RSA PRIVATE KEY-----", "-----END RSA PRIVATE KEY-----"),
+    ]
+    for begin_marker, end_marker in pem_pairs:
+        begin_idx = key.find(begin_marker)
+        end_idx = key.find(end_marker)
+        if begin_idx != -1 and end_idx != -1:
+            end_idx += len(end_marker)
+            key = key[begin_idx:end_idx]
+            break
 
     # Ensure PEM formatting is clean and newline-terminated.
     lines = [line.strip() for line in key.split('\n') if line.strip()]
