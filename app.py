@@ -131,7 +131,10 @@ APP_BUILD_VERSION = "2026.06.28.1"
 
 
 def get_specialty_attributes(category_key):
-    return SPECIALTY_ATTRIBUTES.get(category_key, [])
+    attrs = list(SPECIALTY_ATTRIBUTES.get(category_key, []))
+    if OTHERS_ATTRIBUTE not in attrs:
+        attrs.append(OTHERS_ATTRIBUTE)
+    return attrs
 
 
 def get_app_version_label():
@@ -272,14 +275,11 @@ if st.session_state.browsing_category is not None and st.session_state.exam_key 
         )
 
         if st.session_state.question_filter_mode == "Only questions matching selected attributes":
-            st.session_state.selected_attribute_filters = st.multiselect(
+            st.multiselect(
                 "Select attributes to filter by:",
                 get_specialty_attributes(cat_key),
-                default=st.session_state.selected_attribute_filters,
                 key="selected_attribute_filters",
             )
-        else:
-            st.session_state.selected_attribute_filters = []
 
     try:
         exams = fetch_exams_for_specialty(cat_meta["specialty_id"])
@@ -323,10 +323,16 @@ if SHEETS_URL and not st.session_state.question_attributes_loaded:
     )
     st.session_state.question_attributes_loaded = True
 
-if st.session_state.question_filter_mode == "Only questions matching selected attributes" and st.session_state.selected_attribute_filters:
+active_attribute_filters = (
+    st.session_state.get("selected_attribute_filters", [])
+    if st.session_state.question_filter_mode == "Only questions matching selected attributes"
+    else []
+)
+
+if active_attribute_filters:
     filtered = [
         q for q in questions
-        if any(attr in q.get("attributes", []) for attr in st.session_state.selected_attribute_filters)
+        if any(attr in q.get("attributes", []) for attr in active_attribute_filters)
     ]
     if filtered:
         questions = filtered
