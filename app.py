@@ -124,9 +124,10 @@ SPECIALTY_ATTRIBUTES = {
         "Lung function testing",
     ],
 }
+OTHERS_ATTRIBUTE = "others"
 
 # Bump this on each deployment-relevant change to verify cloud/local parity.
-APP_BUILD_VERSION = "2026.06.22.1"
+APP_BUILD_VERSION = "2026.06.28.1"
 
 
 def get_specialty_attributes(category_key):
@@ -164,6 +165,15 @@ def get_question_attribute_options(q_info):
 
     # Preserve order while avoiding duplicates.
     return list(dict.fromkeys([*inline_attrs, *specialty_attrs]))
+
+
+def normalize_question_attributes(selected_attrs):
+    selected = list(dict.fromkeys(selected_attrs or []))
+    if not selected:
+        return [OTHERS_ATTRIBUTE]
+    if OTHERS_ATTRIBUTE in selected and len(selected) > 1:
+        selected = [attr for attr in selected if attr != OTHERS_ATTRIBUTE]
+    return selected or [OTHERS_ATTRIBUTE]
 
 
 def stretch_button(label, **kwargs):
@@ -204,19 +214,6 @@ elif st.session_state.sheets_probe_ok is False:
 
 # ── Exam selector ──────────────────────────────────────────────────────────────
 if st.session_state.exam_key is None and st.session_state.browsing_category is None:
-    st.subheader("Choose an exam:")
-    cols = st.columns(3)
-    for i, (key, meta) in enumerate(EXAMS.items()):
-        with cols[i % 3]:
-            if stretch_button(meta["label"]):
-                st.session_state.exam_key = key
-                st.session_state.q_index  = 0
-                st.session_state.question_attributes_loaded = False
-                st.session_state.question_attribute_selections = {}
-                reset_answer()
-                st.rerun()
-
-    st.divider()
     st.subheader("Browse by specialty:")
 
     cat_col1, cat_col2 = st.columns(2)
@@ -483,29 +480,45 @@ st.divider()
 
 # ── Question attributes section ─────────────────────────────────────────────────
 q_attrs = resolved_q_attrs
-attr_default = st.session_state.question_attribute_selections.get(q_num, [])
+if OTHERS_ATTRIBUTE not in q_attrs:
+    q_attrs = [*q_attrs, OTHERS_ATTRIBUTE]
+
+saved_attrs = st.session_state.question_attribute_selections.get(q_num, [])
+attr_default = normalize_question_attributes(
+    [attr for attr in saved_attrs if attr in q_attrs]
+)
+
 if q_attrs:
     st.markdown("**Question attributes**")
+    widget_key = f"question_attrs_{q_num}"
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = attr_default
+
     selected_attrs = st.multiselect(
         "Select attribute(s) for this question:",
         q_attrs,
-        default=attr_default,
-        key=f"question_attrs_{q_num}",
+        key=widget_key,
     )
-    st.session_state.question_attribute_selections[q_num] = selected_attrs
-    if selected_attrs:
-        st.caption(f"Saved attributes: {', '.join(selected_attrs)}")
+
+    normalized_attrs = normalize_question_attributes(selected_attrs)
+    if normalized_attrs != selected_attrs:
+        st.session_state[widget_key] = normalized_attrs
+        st.rerun()
+
+    st.session_state.question_attribute_selections[q_num] = normalized_attrs
+    st.caption(f"Saved attributes: {', '.join(normalized_attrs)}")
+
     if SHEETS_URL and st.button("Save attributes", key=f"save_attrs_{q_num}"):
         log_question_attributes(
             SHEETS_URL,
             st.session_state.username,
             st.session_state.exam_key or "Unknown",
             q_num,
-            selected_attrs,
+            normalized_attrs,
         )
         st.success("Question attributes saved.")
 else:
-    selected_attrs = []
+    selected_attrs = [OTHERS_ATTRIBUTE]
 
 st.divider()
 
