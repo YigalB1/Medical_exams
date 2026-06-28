@@ -136,9 +136,24 @@ def _get_sheets_client():
         if missing:
             raise ValueError(f"Missing Google Sheets credential fields: {', '.join(sorted(missing))}")
 
+        if str(creds.get("type", "")).strip() != "service_account":
+            raise ValueError("google_sheets.type must be 'service_account'")
+
+        client_email = str(creds.get("client_email", "")).strip()
+        if "@" not in client_email or not client_email.endswith(".gserviceaccount.com"):
+            raise ValueError(
+                "google_sheets.client_email must be the service account email ending with .gserviceaccount.com"
+            )
+
         private_key = creds.get("private_key", "")
         if "BEGIN PRIVATE KEY" not in private_key and "BEGIN RSA PRIVATE KEY" not in private_key:
             raise ValueError("Google Sheets private_key is malformed or missing PEM header")
+
+        key_lines = [line for line in str(private_key).split("\n") if line.strip()]
+        if len(key_lines) < 4:
+            raise ValueError(
+                "Google Sheets private_key looks too short. Paste the full private key from the service account JSON."
+            )
 
         gc = gspread.service_account_from_dict(creds)
         return gc
